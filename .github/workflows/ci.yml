@@ -9,27 +9,50 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  no-hardcoded-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: App and API client contain no server URL
+        run: |
+          # The user types the server URL at sign-in; shipped code must not carry one.
+          if grep -rnE 'https?://[A-Za-z0-9]' App Packages/*/Sources; then
+            echo "::error::Found a URL literal in shipped code. Server URLs come from the user at sign-in."
+            exit 1
+          fi
+
   build-test:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
-      - name: Build and test (simulator)
+      - name: Pick simulator
         run: |
           DEST=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']))")
+          echo "DEST=$DEST" >> "$GITHUB_ENV"
+      - name: Test API client package (simulator)
+        working-directory: Packages/PaperclipAPI
+        run: |
+          SCHEME=$(xcodebuild -list -json | python3 -c "import json,sys; s=json.load(sys.stdin)['workspace']['schemes']; print('PaperclipAPI-Package' if 'PaperclipAPI-Package' in s else 'PaperclipAPI')")
+          xcodebuild test -scheme "$SCHEME" -destination "id=$DEST" CODE_SIGNING_ALLOWED=NO
+      - name: Build and test app (simulator)
+        run: |
           xcodebuild test -project PaperclipIOS.xcodeproj -scheme PaperclipIOS \
             -destination "id=$DEST" CODE_SIGNING_ALLOWED=NO
 
   ipa:
-    needs: build-test
+    needs: [no-hardcoded-server, build-test]
     if: github.event_name == 'push'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -44,18 +67,43 @@ jobs:
           mkdir Payload
           cp -R build/Build/Products/Release-iphoneos/PaperclipIOS.app Payload/
           zip -qry Paperclip-unsigned.ipa Payload
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: Paperclip-unsigned-ipa
           path: Paperclip-unsigned.ipa
           if-no-files-found: error
 
+  release:
+    needs: ipa
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: Paperclip-unsigned-ipa
+      - name: Publish unsigned .ipa as a pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" Paperclip-unsigned.ipa \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --title "Unsigned build ${{ github.run_number }}" \
+            --notes "Unsigned .ipa built from ${{ github.ref_name }} at ${{ github.sha }}. Sign it before installing."
+
   gate:
     if: always()
-    needs: [build-test, ipa]
+    needs: [no-hardcoded-server, build-test, ipa, release]
     runs-on: ubuntu-latest
     steps:
       - name: Require upstream jobs green
         run: |
+          [ "${{ needs.no-hardcoded-server.result }}" = success ] || exit 1
           [ "${{ needs.build-test.result }}" = success ] || exit 1
-          [ "${{ needs.ipa.result }}" = success ] || [ "${{ needs.ipa.result }}" = skipped ] || exit 1
+          for r in "${{ needs.ipa.result }}" "${{ needs.release.result }}"; do
+            [ "$r" = success ] || [ "$r" = skipped ] || exit 1
+          done
