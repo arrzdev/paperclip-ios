@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, staging]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build and test (simulator)
+        run: |
+          DEST=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']))")
+          xcodebuild test -project PaperclipIOS.xcodeproj -scheme PaperclipIOS \
+            -destination "id=$DEST" CODE_SIGNING_ALLOWED=NO
+
+  ipa:
+    needs: build-test
+    if: github.event_name == 'push'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build unsigned app
+        run: |
+          xcodebuild build -project PaperclipIOS.xcodeproj -scheme PaperclipIOS \
+            -configuration Release -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+      - name: Package unsigned .ipa
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/Paperclip.app Payload/
+          zip -qry Paperclip-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Paperclip-unsigned-ipa
+          path: Paperclip-unsigned.ipa
+          if-no-files-found: error
+
+  gate:
+    if: always()
+    needs: [build-test, ipa]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require upstream jobs green
+        run: |
+          [ "${{ needs.build-test.result }}" = success ] || exit 1
+          [ "${{ needs.ipa.result }}" = success ] || [ "${{ needs.ipa.result }}" = skipped ] || exit 1
