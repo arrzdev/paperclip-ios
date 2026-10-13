@@ -83,7 +83,13 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   the app's Application Support folder. The **API key lives only in the Keychain**: one generic
   password item per account, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, no explicit
   access group (the app is re-signed by a third party; a fixed group breaks).
-- Keys expire (30 days by default): warn before expiry and re-run the flow.
+- Keys expire (30 days by default): warn before expiry and re-run the flow. The server does not
+  report a key's expiry, so the app counts 30 days from the challenge's `approvedAt` and warns
+  3 days before.
+- Code: `AccountStore` (accounts, current account, its `APIClient`; every authenticated call goes
+  through `AccountStore.call` so a 401 marks the account "needs sign-in"), `SignInFlow` (device
+  flow state machine), `ApprovalPresenter` (`ASWebAuthenticationSession`, faked in tests). All
+  logging goes through `AppLog`; tests capture it to prove no key or token is logged.
 - **Never log, print, persist outside the Keychain, or put in an error message** an API key or the
   device-flow token. Any request logging redacts the `Authorization` header.
 
