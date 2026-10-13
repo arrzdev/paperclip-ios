@@ -3,6 +3,9 @@ options:
   bundleIdPrefix: dev.tudu
   deploymentTarget:
     iOS: "17.0"
+packages:
+  PaperclipAPI:
+    path: Packages/PaperclipAPI
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -13,6 +16,8 @@ targets:
     type: application
     platform: iOS
     sources: [App]
+    dependencies:
+      - package: PaperclipAPI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tudu.paperclip
