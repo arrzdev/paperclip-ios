@@ -18,6 +18,3 @@ struct AppLog: Sendable {
         Logger(subsystem: "dev.tudu.paperclip", category: "app").info("\(message, privacy: .public)")
     }
 }
-
-/// Placeholder for contract stubs; removed once every stub is implemented.
-struct NotImplemented: Error {}
