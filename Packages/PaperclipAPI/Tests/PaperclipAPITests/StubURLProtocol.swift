@@ -5,6 +5,8 @@ final class StubURLProtocol: URLProtocol {
     struct Stub {
         var status: Int = 200
         var body: Data = Data("{}".utf8)
+        /// When set, the request fails with this error instead of responding.
+        var error: URLError? = nil
     }
 
     private static let lock = NSLock()
@@ -42,6 +44,10 @@ final class StubURLProtocol: URLProtocol {
         let stub = Self.handler?(recorded) ?? Stub(status: 500)
         Self.lock.unlock()
 
+        if let error = stub.error {
+            client?.urlProtocol(self, didFailWithError: error)
+            return
+        }
         let response = HTTPURLResponse(
             url: request.url!, statusCode: stub.status, httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "application/json"]
