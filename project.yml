@@ -16,7 +16,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tudu.paperclip
-        PRODUCT_NAME: Paperclip
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_CFBundleDisplayName: Paperclip

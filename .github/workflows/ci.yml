@@ -42,7 +42,7 @@ jobs:
       - name: Package unsigned .ipa
         run: |
           mkdir Payload
-          cp -R build/Build/Products/Release-iphoneos/Paperclip.app Payload/
+          cp -R build/Build/Products/Release-iphoneos/PaperclipIOS.app Payload/
           zip -qry Paperclip-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with:

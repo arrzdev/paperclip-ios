@@ -1,5 +1,5 @@
 import XCTest
-@testable import Paperclip
+@testable import PaperclipIOS
 
 final class ContentViewTests: XCTestCase {
     func testTitle() {
