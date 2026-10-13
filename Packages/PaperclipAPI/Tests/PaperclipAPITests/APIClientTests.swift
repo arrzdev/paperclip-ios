@@ -68,6 +68,47 @@ struct APIClientTests {
         #expect(StubURLProtocol.lastRequest?.value(forHTTPHeaderField: "Authorization") == "Bearer pcp_board_TEST")
     }
 
+    @Test func revokeCurrentKeyPostsWithBearerKey() async throws {
+        try stub("revoke-current")
+        try await client.revokeCurrentKey()
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/cli-auth/revoke-current")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer pcp_board_TEST")
+    }
+
+    @Test func companiesList() async throws {
+        try stub("companies")
+        let companies = try await client.companies()
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/companies")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer pcp_board_TEST")
+
+        #expect(companies.map(\.id) == ["company-1", "company-2"])
+        #expect(companies[0].name == "Fixture Co")
+        #expect(companies[0].issuePrefix == "PAP")
+        #expect(companies[1].status == "paused")
+    }
+
+    @Test func issueDetailByIdentifier() async throws {
+        try stub("issue")
+        let issue = try await client.issue(id: "PAP-12")
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/issues/PAP-12")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer pcp_board_TEST")
+
+        #expect(issue.identifier == "PAP-12")
+        #expect(issue.companyId == "company-1")
+        #expect(issue.title == "Fixture task")
+        #expect(issue.status == .inProgress)
+        #expect(issue.priority == .high)
+        #expect(issue.parentId != nil)
+        // The detail response has no lastActivityAt; it stays optional.
+        #expect(issue.lastActivityAt == nil)
+    }
+
     @Test func inboxQueryAndLenientIssueDecoding() async throws {
         try stub("issues")
         var query = IssueListQuery.inbox
@@ -136,6 +177,45 @@ struct APIClientTests {
         await #expect(throws: APIError.server(status: 403, body: "Board authentication required")) {
             try await client.markRead(issueId: "PAP-12")
         }
+    }
+
+    @Test func errorDescriptionsNeverContainKeyOrToken() async throws {
+        let client = self.client
+        let token = "challenge-secret+fixture"
+        let secrets = ["pcp_board_TEST", token, "challenge-secret%2Bfixture"]
+        // Worst case: the server or the system echoes the secrets back.
+        let echo = Data(#"{"error":"Bad key pcp_board_TEST for token challenge-secret+fixture"}"#.utf8)
+        let failures: [StubURLProtocol.Stub] = [
+            .init(status: 401, body: echo),
+            .init(status: 404, body: echo),
+            .init(status: 500, body: echo),
+            .init(status: 200, body: Data(#"{"id":"pcp_board_TEST"}"#.utf8)),
+            .init(error: URLError(.notConnectedToInternet, userInfo: [NSLocalizedDescriptionKey: "Offline: pcp_board_TEST"])),
+        ]
+        // Each call is checked for the secrets it sends: the key always, the token only on the poll.
+        let calls: [(secrets: [String], run: () async throws -> Void)] = [
+            (["pcp_board_TEST"], { _ = try await client.me() }),
+            (secrets, { _ = try await client.cliAuthChallengeState(id: "c1", token: token) }),
+        ]
+        var seen: [String] = []
+        for failure in failures {
+            StubURLProtocol.respond { _ in failure }
+            for call in calls {
+                do {
+                    try await call.run()
+                    Testing.Issue.record("expected the call to fail")
+                } catch {
+                    let apiError = try #require(error as? APIError)
+                    let text = String(describing: apiError) + String(reflecting: apiError) + apiError.localizedDescription
+                    for secret in call.secrets {
+                        #expect(!text.contains(secret), "\(apiError) contains a secret")
+                    }
+                    seen.append(String(describing: apiError).components(separatedBy: "(")[0])
+                }
+            }
+        }
+        // Every APIError case was produced at least once.
+        #expect(Set(seen) == ["unauthorized", "notFound", "server", "decoding", "transport"])
     }
 
     @Test func pathSegmentsAreEncoded() async throws {
