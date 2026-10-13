@@ -30,8 +30,10 @@ struct Account: Codable, Equatable, Identifiable, Sendable {
     }
 
     func keyStatus(now: Date) -> KeyStatus {
-        // TODO: needsSignIn first, then expired (expiresAt <= now), then
-        // expiresSoon (expiresAt - now <= expiryWarning), else valid.
-        .valid
+        if needsSignIn { return .needsSignIn }
+        guard let keyExpiresAt else { return .valid }
+        if keyExpiresAt <= now { return .expired }
+        if keyExpiresAt.timeIntervalSince(now) <= Self.expiryWarning { return .expiresSoon(keyExpiresAt) }
+        return .valid
     }
 }
