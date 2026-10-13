@@ -192,21 +192,22 @@ struct APIClientTests {
             .init(status: 200, body: Data(#"{"id":"pcp_board_TEST"}"#.utf8)),
             .init(error: URLError(.notConnectedToInternet, userInfo: [NSLocalizedDescriptionKey: "Offline: pcp_board_TEST"])),
         ]
-        let calls: [() async throws -> Void] = [
-            { _ = try await client.me() },
-            { _ = try await client.cliAuthChallengeState(id: "c1", token: token) },
+        // Each call is checked for the secrets it sends: the key always, the token only on the poll.
+        let calls: [(secrets: [String], run: () async throws -> Void)] = [
+            (["pcp_board_TEST"], { _ = try await client.me() }),
+            (secrets, { _ = try await client.cliAuthChallengeState(id: "c1", token: token) }),
         ]
         var seen: [String] = []
         for failure in failures {
             StubURLProtocol.respond { _ in failure }
             for call in calls {
                 do {
-                    try await call()
+                    try await call.run()
                     Testing.Issue.record("expected the call to fail")
                 } catch {
                     let apiError = try #require(error as? APIError)
                     let text = String(describing: apiError) + String(reflecting: apiError) + apiError.localizedDescription
-                    for secret in secrets {
+                    for secret in call.secrets {
                         #expect(!text.contains(secret), "\(apiError) contains a secret")
                     }
                     seen.append(String(describing: apiError).components(separatedBy: "(")[0])
