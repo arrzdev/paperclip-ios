@@ -42,7 +42,6 @@ project.yml               XcodeGen spec (source of truth for the project)
 .github/workflows/ci.yml  build, test, unsigned .ipa
 ```
 
-`Packages/PaperclipAPI` is created by the API client task; until then the client lives nowhere.
 The package imports **Foundation only** (no SwiftUI, UIKit, Security) so it stays testable on its
 own with `swift test`. Keychain, UI and app state live in the app target.
 
@@ -72,9 +71,11 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   1. `GET /api/health` on the URL the user typed. Warn (do not block) if the `commit` is not the
      pinned one.
   2. `POST /api/cli-auth/challenges` with `{command, clientName: "Paperclip iOS", requestedAccess: "board"}`
-     → `{id, token, approvalUrl, pollPath}`.
+     → `{id, token, boardApiToken, approvalUrl, pollPath, expiresAt}`. `boardApiToken` is the key;
+     it only works once the user approves.
   3. Open `approvalUrl` in `ASWebAuthenticationSession`; poll `GET /api/cli-auth/challenges/:id?token=…`
-     until it returns the board API key or expires.
+     until `status` is `approved` (then keep `boardApiToken`) or `cancelled` / `expired`. The poll
+     response never contains the key.
   4. `GET /api/cli-auth/me` for the user and companies. Sign-out: `POST /api/cli-auth/revoke-current`,
      then delete the local key.
 - Several servers ("accounts") at once, switched in Settings, each with its selected company.
@@ -114,8 +115,9 @@ own with `swift test`. Keychain, UI and app state live in the app target.
 
 ## Release
 
-- Every push to `staging` or `main` builds an **unsigned `.ipa`** (`CODE_SIGNING_ALLOWED=NO`) and
-  uploads it as the `Paperclip-unsigned-ipa` artifact. The board signs it and installs it.
+- Every push to `staging` or `main` builds an **unsigned `.ipa`** (`CODE_SIGNING_ALLOWED=NO`),
+  uploads it as the `Paperclip-unsigned-ipa` artifact and publishes it as a GitHub pre-release
+  `build-<run number>` (a stable download link). The board signs it and installs it.
   ```bash
   gh run download <run-id> -n Paperclip-unsigned-ipa
   ```
