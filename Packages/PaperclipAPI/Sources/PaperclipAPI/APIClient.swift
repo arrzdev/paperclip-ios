@@ -59,7 +59,7 @@ public struct APIClient: Sendable {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw APIError.transport(error.localizedDescription)
+            throw APIError.transport(redact(error.localizedDescription, query: query))
         }
         guard let http = response as? HTTPURLResponse else {
             throw APIError.transport("Not an HTTP response")
@@ -73,7 +73,7 @@ public struct APIClient: Sendable {
             throw APIError.notFound
         default:
             let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
-            throw APIError.server(status: http.statusCode, body: message)
+            throw APIError.server(status: http.statusCode, body: message.map { redact($0, query: query) })
         }
     }
 
@@ -88,8 +88,22 @@ public struct APIClient: Sendable {
         do {
             return try PaperclipDate.decoder.decode(T.self, from: data)
         } catch {
-            throw APIError.decoding("\(method.rawValue) \(path): \(error)")
+            throw APIError.decoding(redact("\(method.rawValue) \(path): \(error)", query: query))
         }
+    }
+
+    /// Removes the API key and the device-flow token from text that goes into an
+    /// `APIError`, in case a server or the system echoes them back.
+    func redact(_ text: String, query: [URLQueryItem]) -> String {
+        let secrets = ([apiKey] + query.filter { $0.name == "token" }.map(\.value)).compactMap { $0 }
+        var text = text
+        for secret in secrets where !secret.isEmpty {
+            text = text.replacingOccurrences(of: secret, with: "<redacted>")
+            if let encoded = secret.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
+                text = text.replacingOccurrences(of: encoded, with: "<redacted>")
+            }
+        }
+        return text
     }
 
     private struct ErrorBody: Decodable {
