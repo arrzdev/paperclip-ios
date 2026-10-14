@@ -10,6 +10,10 @@ final class StubServer: @unchecked Sendable {
     struct Response {
         var status: Int = 200
         var body: String = "{}"
+
+        static func ok(_ body: String) -> Response {
+            Response(body: body)
+        }
     }
 
     let address: ServerAddress
@@ -152,6 +156,8 @@ enum JSON {
     static let oneCompany = #"[{"id":"company-1","name":"Acme","issuePrefix":"ACM","status":"active"}]"#
     static let unauthorized = #"{"error":"Unauthorized"}"#
     static let revoked = #"{"revoked":true}"#
+    static let unavailable = #"{"error":"Service unavailable"}"#
+    static let invalidToken = #"{"error":"Invalid token"}"#
 }
 
 func decodeMe(_ json: String = JSON.me) throws -> CliAuthMe {
@@ -174,6 +180,36 @@ func tempAccountsFile() -> URL {
 }
 
 // MARK: - Fakes
+
+/// In-memory Keychain whose writes can be made to fail.
+final class TestCredentialStore: CredentialStore, @unchecked Sendable {
+    struct WriteFailed: Error {}
+
+    private let lock = NSLock()
+    private var keys: [UUID: String] = [:]
+    private var failing = false
+
+    var failsWrites: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return failing }
+        set { lock.lock(); defer { lock.unlock() }; failing = newValue }
+    }
+
+    func apiKey(for account: UUID) throws -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return keys[account]
+    }
+
+    func setAPIKey(_ key: String?, for account: UUID) throws {
+        lock.lock(); defer { lock.unlock() }
+        if failing { throw WriteFailed() }
+        keys[account] = key
+    }
+
+    var storedKeyCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return keys.count
+    }
+}
 
 /// Captures every log line.
 final class LogSink: @unchecked Sendable {

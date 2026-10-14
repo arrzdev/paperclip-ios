@@ -56,6 +56,36 @@ final class WebAuthenticationApprovalPresenter: NSObject, ApprovalPresenter {
     }
 }
 
+/// The one `present` call in flight.
+@MainActor
+final class PresentationSlot {
+    private var nextID = 0
+    private var current: (id: Int, end: () -> Void)?
+
+    /// Starts a presentation and ends the one before it. Returns its id.
+    func begin(onEnd: @escaping () -> Void) -> Int {
+        endCurrent()
+        nextID += 1
+        current = (nextID, onEnd)
+        return nextID
+    }
+
+    /// Ends the current presentation. Returns false if there was none.
+    @discardableResult
+    func end(_ id: Int) -> Bool {
+        guard let current else { return false }
+        self.current = nil
+        current.end()
+        return true
+    }
+
+    func endCurrent() {
+        guard let current else { return }
+        self.current = nil
+        current.end()
+    }
+}
+
 extension WebAuthenticationApprovalPresenter: ASWebAuthenticationPresentationContextProviding {
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         MainActor.assumeIsolated { () -> ASPresentationAnchor in
