@@ -82,7 +82,7 @@ struct TaskDetailModelTests {
         #expect(TaskRoute(issueID: "issue-1") == TaskRoute(issueID: "issue-1"))
         #expect(TaskRoute(issueID: "issue-1") != TaskRoute(issueID: "issue-2"))
 
-        let issue = try decodeModel(Issue.self, Self.issue())
+        let issue = try decodeModel(PaperclipAPI.Issue.self, Self.issue())
         #expect(InboxRow(issue: issue, isUnread: true).route == TaskRoute(issueID: "issue-1"))
         #expect(ReplyRow(issue: issue, preview: nil).route == TaskRoute(issueID: "issue-1"))
 
