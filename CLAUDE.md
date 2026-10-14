@@ -93,6 +93,22 @@ own with `swift test`. Keychain, UI and app state live in the app target.
 - **Never log, print, persist outside the Keychain, or put in an error message** an API key or the
   device-flow token. Any request logging redacts the `Authorization` header.
 
+## Screens and refresh
+
+- Tab bar: **Today · Inbox · Tasks · Me** (`AppTab`). Task detail is a pushed screen, not a tab.
+- Every list screen has a view model (`@MainActor @Observable`) that exposes one
+  `LoadState<Value>`: `loading`, `loaded`, `empty`, `error(message)`, `needsSignIn`. Every call goes
+  through `AccountStore.call`, so a 401 becomes `needsSignIn` and the account goes to sign-in.
+- `refresh()` is a full fetch (screen appears, pull to refresh). `poll()` asks only for changes:
+  `updatedSince` = the newest `updatedAt` already loaded (the server's clock, not the device's),
+  merged by issue id. A failed poll keeps the rows on screen; a 401 still flips to `needsSignIn`.
+- `Poller` calls `poll()` every 15 s from the screen's `.task`, so it stops when the screen goes
+  away. Tests inject its `sleep`.
+- Inbox: one fetch of `touchedByUserId=me&inboxArchivedByUserId=me`; the segments Unread
+  (`isUnreadForMe`), Mine (assigned to or created by me) and All filter it locally. New comments
+  bump an issue's `updatedAt`, so the delta poll sees new replies. Read or archive done in another
+  client shows up on the next full fetch.
+
 ## Tests
 
 - New tests use **Swift Testing** (`import Testing`, `@Test`, `#expect`). Existing XCTest stays.
