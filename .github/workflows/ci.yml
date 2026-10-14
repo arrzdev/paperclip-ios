@@ -100,6 +100,19 @@ jobs:
     needs: [no-hardcoded-server, build-test, ipa, release]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+      # Every commit of the PR is the founder's account, with no co-author,
+      # sign-off or generated-by line (the PR body becomes the squash message).
+      - name: Commit identity
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash .github/scripts/checks/commit-identity.sh "$BASE" "$HEAD_SHA"
       - name: Require upstream jobs green
         run: |
           [ "${{ needs.no-hardcoded-server.result }}" = success ] || exit 1
