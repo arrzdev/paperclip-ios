@@ -139,8 +139,10 @@ final class SignInFlow {
     /// approved, cancelled, expired (server status or `now() >= expiresAt`) or
     /// the user closes the page (then one last poll decides). Dismisses the page
     /// when polling ends. On approval: `GET /api/cli-auth/me` with the new key,
-    /// then saves the account; the key is stored only after `me` succeeds.
-    /// Logs each step through `log`, never with a key or token.
+    /// then saves the account; the key is stored only after `me` succeeds. If
+    /// `me` or the save fails, the new key is revoked (best effort) so no
+    /// approved key stays live unknown to the app. Logs each step through
+    /// `log`, never with a key or token.
     func signIn() async {
         guard case .ready(let server, let check) = state, check.canSignIn else { return }
         let client = makeClient(server, nil)
@@ -186,6 +188,7 @@ final class SignInFlow {
             }
             state = .signedIn(account.id)
         } catch {
+            await revokeUnsavedKey(server, challenge.boardApiToken)
             fail(.server(userMessage(for: error)), secrets: secrets)
         }
     }
@@ -197,17 +200,33 @@ final class SignInFlow {
         case failed(Failure)
     }
 
+    /// Retries of one poll after a transport error or a 5xx.
+    private static let pollRetries = 3
+
     /// Polls while the approval page is open. Once the page closes, one more
-    /// poll decides between approved and cancelled.
+    /// poll decides between approved and cancelled. A transient error is
+    /// retried `pollRetries` times, one interval apart; a 4xx fails at once.
     private func pollUntilDecided(_ client: APIClient, _ challenge: CliAuthChallenge) async -> PollOutcome {
         let interval = Duration.milliseconds(max(challenge.suggestedPollIntervalMs ?? 1000, 100))
+        var retries = 0
         while true {
             let isLastPoll = approvalPageClosed
             let challengeState: CliAuthChallengeState
             do {
                 challengeState = try await client.cliAuthChallengeState(id: challenge.id, token: challenge.token)
+                retries = 0
             } catch {
-                return .failed(.server(userMessage(for: error)))
+                guard Self.isTransient(error), retries < Self.pollRetries, now() < challenge.expiresAt else {
+                    return .failed(.server(userMessage(for: error)))
+                }
+                retries += 1
+                log("Sign-in: poll failed, retry \(retries) of \(Self.pollRetries)")
+                do {
+                    try await sleep(interval)
+                } catch {
+                    return .failed(.cancelled)
+                }
+                continue
             }
             switch challengeState.status {
             case .approved:
@@ -228,6 +247,27 @@ final class SignInFlow {
             } catch {
                 return .failed(.cancelled)
             }
+        }
+    }
+
+    private static func isTransient(_ error: Error) -> Bool {
+        switch error {
+        case APIError.transport:
+            return true
+        case APIError.server(let status, _):
+            return status >= 500
+        default:
+            return false
+        }
+    }
+
+    /// `POST /api/cli-auth/revoke-current` with an approved key the app did not keep.
+    private func revokeUnsavedKey(_ server: ServerAddress, _ apiKey: String) async {
+        do {
+            try await makeClient(server, apiKey).revokeCurrentKey()
+            log("Sign-in: revoked the new key because it was not saved")
+        } catch {
+            log("Sign-in: could not revoke the new key that was not saved")
         }
     }
 

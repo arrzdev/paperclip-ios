@@ -7,7 +7,7 @@ import Testing
 @MainActor
 final class SignInHarness {
     let server: StubServer
-    let credentials: InMemoryCredentialStore
+    let credentials: TestCredentialStore
     let file: URL
     let log: LogSink
     let clock: TestClock
@@ -15,7 +15,7 @@ final class SignInHarness {
     let store: AccountStore
 
     init(approval behavior: FakeApproval.Behavior = .staysOpen) {
-        let credentials = InMemoryCredentialStore()
+        let credentials = TestCredentialStore()
         let file = tempAccountsFile()
         let log = LogSink()
         self.server = StubServer()
@@ -50,14 +50,26 @@ final class SignInHarness {
         health: String = JSON.healthOK,
         expiresAt: String = "2026-10-13T22:31:01.003Z"
     ) {
+        serveSignIn(responses: polls.map(StubServer.Response.ok), health: health, expiresAt: expiresAt)
+    }
+
+    func serveSignIn(
+        responses polls: [StubServer.Response],
+        health: String = JSON.healthOK,
+        expiresAt: String = "2026-10-13T22:31:01.003Z"
+    ) {
         server.on("GET", "/api/health", .init(body: health))
         server.on("POST", "/api/cli-auth/challenges", .init(status: 201, body: JSON.challenge(host: server.host, expiresAt: expiresAt)))
-        server.on("GET", "/api/cli-auth/challenges/c1", polls.map { StubServer.Response(body: $0) })
+        server.on("GET", "/api/cli-auth/challenges/c1", polls)
         server.on("GET", "/api/cli-auth/me", .init(body: JSON.me))
     }
 
     var polls: [URLRequest] {
         server.requests("GET", "/api/cli-auth/challenges/c1")
+    }
+
+    var revokes: [URLRequest] {
+        server.requests("POST", "/api/cli-auth/revoke-current")
     }
 }
 
@@ -256,6 +268,131 @@ struct SignInFlowTests {
         #expect(h.store.accounts.first?.selectedCompanyId == "company-1")
         #expect(try h.credentials.apiKey(for: old.id) == JSON.key)
         #expect(h.store.route == .home(old.id))
+    }
+
+    // MARK: Poll errors
+
+    @Test func aTransientPollErrorIsRetried() async throws {
+        let h = SignInHarness()
+        let unavailable = StubServer.Response(status: 503, body: JSON.unavailable)
+        h.serveSignIn(responses: [.ok(JSON.pending), unavailable, unavailable, unavailable, .ok(JSON.approved)])
+        let flow = h.flow()
+
+        await flow.checkServer()
+        await flow.signIn()
+
+        let account = try #require(h.store.accounts.first)
+        #expect(flow.state == .signedIn(account.id))
+        #expect(h.polls.count == 5)
+    }
+
+    @Test func aPollKeepsFailingAfterThreeRetries() async {
+        let h = SignInHarness()
+        h.serveSignIn(responses: [.ok(JSON.pending), .init(status: 503, body: JSON.unavailable)])
+        let flow = h.flow()
+
+        await flow.checkServer()
+        await flow.signIn()
+
+        guard case .failed(.server) = flow.state else {
+            Issue.record("Expected a server failure, got \(flow.state)")
+            return
+        }
+        // One good poll, the failing poll and three retries.
+        #expect(h.polls.count == 5)
+        #expect(h.approval.dismissed)
+        #expect(h.store.accounts.isEmpty)
+    }
+
+    @Test func aClientErrorOnAPollFailsAtOnce() async {
+        let h = SignInHarness()
+        h.serveSignIn(responses: [.ok(JSON.pending), .init(status: 400, body: JSON.invalidToken)])
+        let flow = h.flow()
+
+        await flow.checkServer()
+        await flow.signIn()
+
+        guard case .failed(.server) = flow.state else {
+            Issue.record("Expected a server failure, got \(flow.state)")
+            return
+        }
+        #expect(h.polls.count == 2)
+    }
+
+    // MARK: Approved key that is not kept
+
+    @Test func revokesTheNewKeyWhenLoadingTheUserFails() async throws {
+        let h = SignInHarness()
+        h.serveSignIn(polls: [JSON.approved])
+        h.server.on("GET", "/api/cli-auth/me", .init(status: 500, body: #"{"error":"boom"}"#))
+        h.server.on("POST", "/api/cli-auth/revoke-current", .init(body: JSON.revoked))
+        let flow = h.flow()
+
+        await flow.checkServer()
+        await flow.signIn()
+
+        guard case .failed(.server) = flow.state else {
+            Issue.record("Expected a server failure, got \(flow.state)")
+            return
+        }
+        let revoke = try #require(h.revokes.first)
+        #expect(h.revokes.count == 1)
+        #expect(revoke.value(forHTTPHeaderField: "Authorization") == "Bearer \(JSON.key)")
+        #expect(h.store.accounts.isEmpty)
+        #expect(h.credentials.storedKeyCount == 0)
+    }
+
+    @Test func revokesTheNewKeyWhenSavingTheAccountFails() async throws {
+        let h = SignInHarness()
+        h.serveSignIn(polls: [JSON.approved])
+        h.server.on("POST", "/api/cli-auth/revoke-current", .init(body: JSON.revoked))
+        h.credentials.failsWrites = true
+        let flow = h.flow()
+
+        await flow.checkServer()
+        await flow.signIn()
+
+        guard case .failed = flow.state else {
+            Issue.record("Expected a failure, got \(flow.state)")
+            return
+        }
+        let revoke = try #require(h.revokes.first)
+        #expect(revoke.value(forHTTPHeaderField: "Authorization") == "Bearer \(JSON.key)")
+        #expect(h.store.accounts.isEmpty)
+        #expect(h.credentials.storedKeyCount == 0)
+        for line in h.log.lines {
+            #expect(!line.contains(JSON.key))
+        }
+    }
+
+    @Test func aFailedRevokeStillEndsInTheSignInError() async {
+        let h = SignInHarness()
+        h.serveSignIn(polls: [JSON.approved])
+        h.server.on("GET", "/api/cli-auth/me", .init(status: 500, body: #"{"error":"boom"}"#))
+        h.server.on("POST", "/api/cli-auth/revoke-current", .init(status: 503, body: JSON.unavailable))
+        let flow = h.flow()
+
+        await flow.checkServer()
+        await flow.signIn()
+
+        guard case .failed(.server) = flow.state else {
+            Issue.record("Expected a server failure, got \(flow.state)")
+            return
+        }
+        #expect(h.revokes.count == 1)
+        #expect(h.store.accounts.isEmpty)
+    }
+
+    @Test func noRevokeWhenTheChallengeIsNotApproved() async {
+        let h = SignInHarness()
+        h.serveSignIn(polls: [JSON.state("cancelled")])
+        let flow = h.flow()
+
+        await flow.checkServer()
+        await flow.signIn()
+
+        #expect(flow.state == .failed(.denied))
+        #expect(h.revokes.isEmpty)
     }
 
     // MARK: Secrets

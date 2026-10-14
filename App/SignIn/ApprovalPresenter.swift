@@ -18,7 +18,7 @@ protocol ApprovalPresenter: AnyObject {
 @MainActor
 final class WebAuthenticationApprovalPresenter: NSObject, ApprovalPresenter {
     private var session: ASWebAuthenticationSession?
-    private var finished: CheckedContinuation<Void, Never>?
+    private let slot = PresentationSlot()
 
     func present(_ url: URL) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -31,28 +31,63 @@ final class WebAuthenticationApprovalPresenter: NSObject, ApprovalPresenter {
     func dismiss() {
         // `cancel()` does not reliably call the completion handler; end `present` here.
         session?.cancel()
-        finish()
+        session = nil
+        slot.endCurrent()
     }
 
     private func start(_ url: URL, _ continuation: CheckedContinuation<Void, Never>) {
-        finish()
-        finished = continuation
+        session?.cancel()
+        let id = slot.begin { continuation.resume() }
+        // The handler names its own presentation, so a late call from an
+        // earlier session cannot end this one.
         let session = ASWebAuthenticationSession(url: url, callbackURLScheme: nil) { [weak self] _, _ in
             let presenter = self
-            Task { @MainActor in presenter?.finish() }
+            Task { @MainActor in presenter?.finish(id) }
         }
         session.presentationContextProvider = self
         session.prefersEphemeralWebBrowserSession = false
         self.session = session
         if !session.start() {
-            finish()
+            finish(id)
         }
     }
 
-    private func finish() {
-        session = nil
-        finished?.resume()
-        finished = nil
+    private func finish(_ id: Int) {
+        if slot.end(id) {
+            session = nil
+        }
+    }
+}
+
+/// The one `present` call in flight. Each presentation has an id, so only
+/// its own completion can end it.
+@MainActor
+final class PresentationSlot {
+    private var nextID = 0
+    private var current: (id: Int, end: () -> Void)?
+
+    /// Starts a presentation and ends the one before it. Returns its id.
+    func begin(onEnd: @escaping () -> Void) -> Int {
+        endCurrent()
+        nextID += 1
+        current = (nextID, onEnd)
+        return nextID
+    }
+
+    /// Ends presentation `id` if it is still the current one. Returns false
+    /// if it already ended or a newer one replaced it.
+    @discardableResult
+    func end(_ id: Int) -> Bool {
+        guard let current, current.id == id else { return false }
+        self.current = nil
+        current.end()
+        return true
+    }
+
+    func endCurrent() {
+        guard let current else { return }
+        self.current = nil
+        current.end()
     }
 }
 
