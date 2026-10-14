@@ -1,6 +1,6 @@
 import Foundation
 
-// M1 endpoints (sign-in, inbox, task detail with comments, read/archive).
+// M1 endpoints (sign-in, inbox, Today, task detail with comments, read/archive).
 // Paths are relative to `<server>/api`.
 
 public extension APIClient {
@@ -49,6 +49,15 @@ public extension APIClient {
         try await send(.get, "/companies/\(segment(companyId))/sidebar-badges")
     }
 
+    /// What needs the board now (requests, approvals, reviews, failed runs…).
+    func attention(companyId: String) async throws -> AttentionFeed {
+        try await send(.get, "/companies/\(segment(companyId))/attention")
+    }
+
+    func dashboard(companyId: String) async throws -> Dashboard {
+        try await send(.get, "/companies/\(segment(companyId))/dashboard")
+    }
+
     // MARK: Issues
 
     func issues(companyId: String, query: IssueListQuery = IssueListQuery()) async throws -> [Issue] {
@@ -64,8 +73,10 @@ public extension APIClient {
         try await send(.patch, "/issues/\(segment(id))", body: update)
     }
 
-    func comments(issueId: String) async throws -> [IssueComment] {
-        try await send(.get, "/issues/\(segment(issueId))/comments")
+    /// Newest first. `limit` caps the count (Today's preview reads the latest few).
+    func comments(issueId: String, limit: Int? = nil) async throws -> [IssueComment] {
+        let query = limit.map { [URLQueryItem(name: "limit", value: String($0))] } ?? []
+        return try await send(.get, "/issues/\(segment(issueId))/comments", query: query)
     }
 
     func addComment(issueId: String, _ comment: NewComment) async throws -> IssueComment {
