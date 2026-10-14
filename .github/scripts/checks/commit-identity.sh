@@ -52,7 +52,7 @@ done < <(git log --format=$'%H\t%an <%ae>\t%cn <%ce>' "$base..$head")
 
 if [ -n "$(printf '%s\n' "${PR_BODY:-}" | bad_lines)" ]; then
   echo "::error::PR description has a co-author, sign-off or generated-by line (it becomes the squash commit message)"
-  echo "Fix: edit the PR description, then re-run the check."
+  echo "Fix: edit the PR description, then push or close and reopen the PR (a re-run reuses the old text)."
   bad_body=1
 fi
 
