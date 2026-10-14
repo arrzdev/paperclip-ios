@@ -101,8 +101,14 @@ final class AccountStore {
     /// again to a server already in the list (same `storageKey`) updates that
     /// account (same id, selected company kept, `needsSignIn` cleared) instead
     /// of adding one. `keyExpiresAt` = `approvedAt + Account.keyLifetime`.
+    ///
+    /// All or nothing: if the accounts file cannot be written, the account's
+    /// previous key (none for a new account), `accounts` and `currentAccountID`
+    /// are restored and the error is rethrown.
     @discardableResult
     func saveSignIn(server: ServerAddress, me: CliAuthMe, apiKey: String, approvedAt: Date) throws -> Account {
+        let previousAccounts = accounts
+        let previousCurrentAccountID = currentAccountID
         let existing = accounts.firstIndex { $0.server.storageKey == server.storageKey }
         var account = existing.map { accounts[$0] } ?? Account(
             id: UUID(), server: server, userId: nil, userName: nil, userEmail: nil,
@@ -116,6 +122,11 @@ final class AccountStore {
         account.keyExpiresAt = approvedAt.addingTimeInterval(Account.keyLifetime)
         account.needsSignIn = false
 
+        // Read before writing: a Keychain read error stops here with nothing changed.
+        var previousKey: String?
+        if existing != nil {
+            previousKey = try credentials.apiKey(for: account.id)
+        }
         try credentials.setAPIKey(apiKey, for: account.id)
         if let existing {
             accounts[existing] = account
@@ -123,7 +134,19 @@ final class AccountStore {
             accounts.append(account)
         }
         currentAccountID = account.id
-        try save()
+        do {
+            try save()
+        } catch {
+            accounts = previousAccounts
+            currentAccountID = previousCurrentAccountID
+            do {
+                try credentials.setAPIKey(previousKey, for: account.id)
+            } catch let keychainError {
+                log("Account \(account.id): could not restore the previous key: \(keychainError)")
+            }
+            log("Account \(account.id): sign-in not saved, rolled back")
+            throw error
+        }
         log("Signed in to \(server.displayName) as account \(account.id)")
         return account
     }
