@@ -31,6 +31,7 @@ person_ok() { # person_ok <role> "<name> <email>"
 }
 
 bad=0
+bad_body=0
 count=0
 while IFS=$'\t' read -r sha author committer; do
   count=$((count + 1))
@@ -51,12 +52,14 @@ done < <(git log --format=$'%H\t%an <%ae>\t%cn <%ce>' "$base..$head")
 
 if [ -n "$(printf '%s\n' "${PR_BODY:-}" | bad_lines)" ]; then
   echo "::error::PR description has a co-author, sign-off or generated-by line (it becomes the squash commit message)"
-  bad=1
+  echo "Fix: edit the PR description, then re-run the check."
+  bad_body=1
 fi
 
 if [ "$bad" -ne 0 ]; then
-  echo "Fix: reset the identity (no GIT_AUTHOR_*/GIT_COMMITTER_* exports, no git -c user.*),"
-  echo "then git rebase -r --exec 'git commit --amend --no-edit --reset-author' $base and force-push."
-  exit 1
+  echo "Fix: unset any identity override (no GIT_AUTHOR_*/GIT_COMMITTER_* exports, no git -c user.*),"
+  echo "drop the lines above from the messages, then"
+  echo "git rebase -r --exec 'git commit --amend --no-edit --reset-author' $base and force-push."
 fi
+[ "$bad" -eq 0 ] && [ "$bad_body" -eq 0 ] || exit 1
 echo "Commit identity: $count commit(s) in ${base:0:12}..${head:0:12}, all by the founder's account."
