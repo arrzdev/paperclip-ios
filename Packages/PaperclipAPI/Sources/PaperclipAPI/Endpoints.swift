@@ -101,4 +101,16 @@ public extension APIClient {
     func unarchiveFromInbox(issueId: String) async throws {
         _ = try await request(.delete, "/issues/\(segment(issueId))/inbox-archive")
     }
+
+    func attention(companyId: String) async throws -> AttentionFeed {
+        try await send(.get, "/companies/\(segment(companyId))/attention")
+    }
+
+    func dashboard(companyId: String) async throws -> Dashboard {
+        try await send(.get, "/companies/\(segment(companyId))/dashboard")
+    }
+
+    func comments(issueId: String, limit: Int) async throws -> [IssueComment] {
+        try await send(.get, "/issues/\(segment(issueId))/comments", query: [URLQueryItem(name: "limit", value: String(limit))])
+    }
 }

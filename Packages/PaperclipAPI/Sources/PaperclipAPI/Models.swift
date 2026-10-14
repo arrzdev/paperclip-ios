@@ -204,9 +204,14 @@ public struct Issue: Decodable, Equatable, Identifiable, Sendable {
     public let assigneeUserId: String?
     public let projectId: String?
     public let parentId: String?
+    public let createdByUserId: String?
     public let createdAt: Date
     public let updatedAt: Date
+    public let completedAt: Date?
     public let lastActivityAt: Date?
+    public let isUnreadForMe: Bool?
+    public let lastExternalCommentAt: Date?
+    public let myLastTouchAt: Date?
 }
 
 /// Fields the app can change with `PATCH /api/issues/:id`. Nil fields are not sent.
@@ -253,6 +258,7 @@ public struct IssueListQuery: Equatable, Sendable {
     public static var inbox: IssueListQuery {
         var query = IssueListQuery()
         query.touchedByUserId = "me"
+        query.inboxArchivedByUserId = "me"
         return query
     }
 
@@ -317,4 +323,53 @@ public struct Attachment: Decodable, Equatable, Identifiable, Sendable {
     public let byteSize: Int?
     public let contentPath: String?
     public let createdAt: Date?
+}
+
+public enum AttentionSourceKind: Decodable, Hashable, Sendable {
+    case approval, issueThreadInteraction, review, failedRun
+    case unknown(String)
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        switch raw {
+        case "approval": self = .approval
+        case "issue_thread_interaction": self = .issueThreadInteraction
+        case "review": self = .review
+        case "failed_run": self = .failedRun
+        default: self = .unknown(raw)
+        }
+    }
+}
+public struct AttentionSubject: Decodable, Equatable, Sendable {
+    public let kind: String
+    public let id: String
+    public let title: String?
+    public let identifier: String?
+    public let status: String?
+    public let href: String?
+}
+public struct AttentionDetail: Decodable, Equatable, Sendable {
+    public let kind: String
+    public let promptExcerpt: String?
+    public let summaryExcerpt: String?
+    public let questionCount: Int?
+    public let firstQuestionText: String?
+}
+public struct AttentionItem: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let sourceKind: AttentionSourceKind
+    public let subject: AttentionSubject
+    public let whyNow: String?
+    public let activityAt: Date?
+    public let relatedIssue: AttentionSubject?
+    public let detail: AttentionDetail?
+}
+public struct AttentionFeed: Decodable, Equatable, Sendable {
+    public let items: [AttentionItem]
+}
+public struct Dashboard: Decodable, Equatable, Sendable {
+    public struct Agents: Decodable, Equatable, Sendable { public let active: Int; public let running: Int; public let paused: Int; public let error: Int }
+    public struct Tasks: Decodable, Equatable, Sendable { public let open: Int; public let inProgress: Int; public let blocked: Int; public let done: Int }
+    public let agents: Agents
+    public let tasks: Tasks
+    public let pendingApprovals: Int?
 }
