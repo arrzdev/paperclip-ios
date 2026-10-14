@@ -303,4 +303,100 @@ struct APIClientTests {
         _ = try await client.comments(issueId: "a/b")
         #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/issues/a%2Fb/comments")
     }
+
+    // MARK: - Task detail
+
+    private func queryItems(_ request: URLRequest?) -> [String: String] {
+        guard let url = request?.url,
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return [:] }
+        return Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { _, last in last })
+    }
+
+    @Test func commentThreadIsOldestFirstAndPagesAfterACommentId() async throws {
+        let comment = try fixture("comment")
+        let body = Data("[".utf8) + comment + Data("]".utf8)
+        StubURLProtocol.respond { _ in .init(body: body) }
+
+        // Full thread: every comment, oldest first.
+        let thread = try await client.commentThread(issueId: "PAP-12")
+        var request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.path == "/api/issues/PAP-12/comments")
+        #expect(queryItems(request) == ["order": "asc"])
+        #expect(thread.map(\.body) == ["Looks good"])
+
+        // Delta: only comments newer than the last one on screen.
+        _ = try await client.commentThread(issueId: "PAP-12", after: "00000000-0000-4000-8000-000000000025")
+        request = try #require(StubURLProtocol.lastRequest)
+        #expect(queryItems(request) == ["order": "asc", "after": "00000000-0000-4000-8000-000000000025"])
+    }
+
+    @Test func liveRunsNameTheWorkingAgent() async throws {
+        try stub("live-runs")
+        let runs = try await client.liveRuns(issueId: "PAP-12")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/issues/PAP-12/live-runs")
+        #expect(runs.count == 1)
+        #expect(runs[0].id == "00000000-0000-4000-8000-000000000030")
+        #expect(runs[0].agentId == "00000000-0000-4000-8000-000000000007")
+        #expect(runs[0].agentName == "Fixture Agent")
+        #expect(runs[0].status == "running")
+        #expect(runs[0].startedAt == PaperclipDate.parse("2026-10-13T22:28:24.651Z"))
+    }
+
+    @Test func agentsForTheAssigneePicker() async throws {
+        try stub("agents")
+        let agents = try await client.agents(companyId: "company-1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/companies/company-1/agents")
+        #expect(agents.map(\.name) == ["Fixture Agent", "Fixture CEO"])
+        #expect(agents[1].id == "00000000-0000-4000-8000-000000000008")
+        #expect(agents[1].role == "ceo")
+        #expect(agents[1].title == "CEO")
+        #expect(agents[0].status == "running")
+    }
+
+    @Test func assigneeChangeSendsBothFieldsSoTheOtherOneClears() async throws {
+        let list = try #require(JSONSerialization.jsonObject(with: try fixture("issues")) as? [Any])
+        let body = try JSONSerialization.data(withJSONObject: list[0])
+        StubURLProtocol.respond { _ in .init(body: body) }
+
+        _ = try await client.updateIssue(id: "PAP-12", IssueUpdate(assignee: .agent("agent-1")))
+        var sent = try jsonBody(StubURLProtocol.lastRequest)
+        #expect(sent.keys.sorted() == ["assigneeAgentId", "assigneeUserId"])
+        #expect(sent["assigneeAgentId"] as? String == "agent-1")
+        #expect(sent["assigneeUserId"] is NSNull)
+
+        _ = try await client.updateIssue(id: "PAP-12", IssueUpdate(assignee: .user("user-1")))
+        sent = try jsonBody(StubURLProtocol.lastRequest)
+        #expect(sent["assigneeAgentId"] is NSNull)
+        #expect(sent["assigneeUserId"] as? String == "user-1")
+
+        _ = try await client.updateIssue(id: "PAP-12", IssueUpdate(assignee: .nobody))
+        sent = try jsonBody(StubURLProtocol.lastRequest)
+        #expect(sent.keys.sorted() == ["assigneeAgentId", "assigneeUserId"])
+        #expect(sent["assigneeAgentId"] is NSNull)
+        #expect(sent["assigneeUserId"] is NSNull)
+
+        // Without an assignee change neither field is sent.
+        _ = try await client.updateIssue(id: "PAP-12", IssueUpdate(priority: .low))
+        sent = try jsonBody(StubURLProtocol.lastRequest)
+        #expect(sent.keys.sorted() == ["priority"])
+    }
+
+    @Test func attachmentContentIsRawBytes() async throws {
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        StubURLProtocol.respond { _ in .init(body: png) }
+        let data = try await client.attachmentContent(id: "00000000-0000-4000-8000-000000000040")
+        #expect(data == png)
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/attachments/00000000-0000-4000-8000-000000000040/content")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer pcp_board_TEST")
+    }
+
+    @Test func attachmentsCarryTheCommentTheyBelongTo() async throws {
+        let json = #"[{"id":"att-1","companyId":"company-1","issueId":"issue-1","issueCommentId":"comment-1","contentType":"image/png","byteSize":8,"originalFilename":"screenshot.png","contentPath":"/api/attachments/att-1/content","createdAt":"2026-10-13T22:33:15.169Z"}]"#
+        StubURLProtocol.respond { _ in .init(body: Data(json.utf8)) }
+        let attachments = try await client.attachments(issueId: "PAP-12")
+        #expect(attachments.map(\.issueCommentId) == ["comment-1"])
+        #expect(attachments[0].contentType == "image/png")
+    }
 }
