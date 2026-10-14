@@ -216,29 +216,69 @@ public struct Issue: Decodable, Equatable, Identifiable, Sendable {
     public let myLastTouchAt: Date?
 }
 
+/// Who a task is assigned to. A change sends both assignee fields, one of
+/// them null, so the server clears the other one.
+public enum IssueAssignee: Hashable, Sendable {
+    case agent(String)
+    case user(String)
+    case nobody
+
+    public init(agentId: String?, userId: String?) {
+        if let agentId {
+            self = .agent(agentId)
+        } else if let userId {
+            self = .user(userId)
+        } else {
+            self = .nobody
+        }
+    }
+}
+
 /// Fields the app can change with `PATCH /api/issues/:id`. Nil fields are not sent.
 public struct IssueUpdate: Encodable, Equatable, Sendable {
     public var title: String?
     public var status: IssueStatus?
     public var priority: IssuePriority?
-    public var assigneeAgentId: String?
-    public var assigneeUserId: String?
+    public var assignee: IssueAssignee?
     public var comment: String?
 
     public init(
         title: String? = nil,
         status: IssueStatus? = nil,
         priority: IssuePriority? = nil,
-        assigneeAgentId: String? = nil,
-        assigneeUserId: String? = nil,
+        assignee: IssueAssignee? = nil,
         comment: String? = nil
     ) {
         self.title = title
         self.status = status
         self.priority = priority
-        self.assigneeAgentId = assigneeAgentId
-        self.assigneeUserId = assigneeUserId
+        self.assignee = assignee
         self.comment = comment
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case title, status, priority, assigneeAgentId, assigneeUserId, comment
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(title, forKey: .title)
+        try container.encodeIfPresent(status, forKey: .status)
+        try container.encodeIfPresent(priority, forKey: .priority)
+        try container.encodeIfPresent(comment, forKey: .comment)
+        switch assignee {
+        case .none:
+            break
+        case .agent(let id):
+            try container.encode(id, forKey: .assigneeAgentId)
+            try container.encodeNil(forKey: .assigneeUserId)
+        case .user(let id):
+            try container.encodeNil(forKey: .assigneeAgentId)
+            try container.encode(id, forKey: .assigneeUserId)
+        case .nobody:
+            try container.encodeNil(forKey: .assigneeAgentId)
+            try container.encodeNil(forKey: .assigneeUserId)
+        }
     }
 }
 
@@ -320,11 +360,47 @@ public struct IssueDocument: Decodable, Equatable, Identifiable, Sendable {
 
 public struct Attachment: Decodable, Equatable, Identifiable, Sendable {
     public let id: String
+    /// The comment the file was sent with; nil for a file on the task itself.
+    public let issueCommentId: String?
     public let originalFilename: String?
     public let contentType: String?
     public let byteSize: Int?
     public let contentPath: String?
     public let createdAt: Date?
+}
+
+/// A file to upload with `POST /api/companies/:cid/issues/:iid/attachments`.
+public struct AttachmentUpload: Equatable, Sendable {
+    public let data: Data
+    public let filename: String
+    public let contentType: String
+
+    public init(data: Data, filename: String, contentType: String) {
+        self.data = data
+        self.filename = filename
+        self.contentType = contentType
+    }
+}
+
+/// A queued or running agent run on a task (`GET /api/issues/:id/live-runs`).
+public struct LiveRun: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let status: String
+    public let agentId: String
+    public let agentName: String?
+    public let startedAt: Date?
+    public let createdAt: Date?
+}
+
+// MARK: - Agents
+
+/// An agent of a company (`GET /api/companies/:id/agents`), for the assignee picker.
+public struct Agent: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public let role: String?
+    public let title: String?
+    public let status: String?
 }
 
 // MARK: - Attention (what needs the board)

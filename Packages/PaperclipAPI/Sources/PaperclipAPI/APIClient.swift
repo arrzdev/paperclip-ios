@@ -37,27 +37,39 @@ public struct APIClient: Sendable {
 
     struct Empty: Decodable {}
 
+    /// A body that is not JSON (a multipart upload).
+    struct RawBody {
+        let data: Data
+        let contentType: String
+    }
+
     func request(
         _ method: Method,
         _ path: String,
         query: [URLQueryItem] = [],
-        body: (any Encodable)? = nil
+        body: (any Encodable)? = nil,
+        rawBody: RawBody? = nil,
+        accept: String = "application/json",
+        delegate: (any URLSessionTaskDelegate)? = nil
     ) async throws -> Data {
         var request = URLRequest(url: server.apiURL(path: path, query: query))
         request.httpMethod = method.rawValue
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         if let apiKey {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try PaperclipDate.encoder.encode(body)
+        } else if let rawBody {
+            request.setValue(rawBody.contentType, forHTTPHeaderField: "Content-Type")
+            request.httpBody = rawBody.data
         }
 
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await session.data(for: request, delegate: delegate)
         } catch {
             throw APIError.transport(redact(error.localizedDescription, query: query))
         }
