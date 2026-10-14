@@ -19,6 +19,7 @@ final class StubServer: @unchecked Sendable {
     let address: ServerAddress
     private let lock = NSLock()
     private var routes: [String: [Response]] = [:]
+    private var queryRoutes: [(key: String, match: [String: String], responses: [Response])] = []
     private var recorded: [URLRequest] = []
 
     init() {
@@ -41,6 +42,16 @@ final class StubServer: @unchecked Sendable {
         on(method, path, responses)
     }
 
+    /// Like `on`, but only for requests whose query has every `match` item.
+    /// The route with the most matching items wins over less specific ones and
+    /// over the path-only route.
+    func on(_ method: String, _ path: String, query match: [String: String], _ responses: Response...) {
+        lock.lock(); defer { lock.unlock() }
+        let key = method + " " + path
+        queryRoutes.removeAll { $0.key == key && $0.match == match }
+        queryRoutes.append((key, match, responses))
+    }
+
     var allRequests: [URLRequest] {
         lock.lock(); defer { lock.unlock() }
         return recorded
@@ -54,6 +65,18 @@ final class StubServer: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         recorded.append(request)
         let key = (request.httpMethod ?? "GET") + " " + (request.url?.path ?? "")
+        let items = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+        let sent = Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { _, last in last })
+        let candidates = queryRoutes.indices.filter { index in
+            queryRoutes[index].key == key && queryRoutes[index].match.allSatisfy { sent[$0.key] == $0.value }
+        }
+        if let index = candidates.max(by: { queryRoutes[$0].match.count < queryRoutes[$1].match.count }),
+           let first = queryRoutes[index].responses.first {
+            if queryRoutes[index].responses.count > 1 {
+                queryRoutes[index].responses.removeFirst()
+            }
+            return first
+        }
         guard var queue = routes[key], let first = queue.first else {
             return Response(status: 404, body: #"{"error":"Not found"}"#)
         }

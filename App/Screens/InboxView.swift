@@ -135,7 +135,8 @@ struct InboxView: View {
     }
 }
 
-private struct UndoToast: View {
+/// "Marked as read · Undo" at the bottom of a list (Inbox, Today).
+struct UndoToast: View {
     let undo: InboxUndo
     let onUndo: () -> Void
 
@@ -154,7 +155,8 @@ private struct UndoToast: View {
     }
 }
 
-private struct ActionErrorBanner: View {
+/// Why a swipe action was rolled back.
+struct ActionErrorBanner: View {
     let message: String
     let onDismiss: () -> Void
 

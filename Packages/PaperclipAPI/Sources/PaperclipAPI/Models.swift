@@ -326,3 +326,101 @@ public struct Attachment: Decodable, Equatable, Identifiable, Sendable {
     public let contentPath: String?
     public let createdAt: Date?
 }
+
+// MARK: - Attention (what needs the board)
+
+public enum AttentionSourceKind: Codable, Hashable, Sendable {
+    case approval, decision, issueThreadInteraction, joinRequest, recoveryAction
+    case productivityReview, blockerAttention, review, failedRun, budgetAlert, agentErrorAlert
+    case unknown(String)
+
+    private static let known: [(AttentionSourceKind, String)] = [
+        (.approval, "approval"),
+        (.decision, "decision"),
+        (.issueThreadInteraction, "issue_thread_interaction"),
+        (.joinRequest, "join_request"),
+        (.recoveryAction, "recovery_action"),
+        (.productivityReview, "productivity_review"),
+        (.blockerAttention, "blocker_attention"),
+        (.review, "review"),
+        (.failedRun, "failed_run"),
+        (.budgetAlert, "budget_alert"),
+        (.agentErrorAlert, "agent_error_alert"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+/// What an attention item is about (an interaction, an approval, a run…) or
+/// the issue it belongs to. `href` is a path in the web UI.
+public struct AttentionSubject: Decodable, Equatable, Sendable {
+    public let kind: String
+    public let id: String
+    public let title: String?
+    public let identifier: String?
+    public let status: String?
+    public let href: String?
+}
+
+/// Kind-specific extras; only the excerpts the app shows are decoded.
+public struct AttentionDetail: Decodable, Equatable, Sendable {
+    public let kind: String
+    public let promptExcerpt: String?
+    public let summaryExcerpt: String?
+    public let questionCount: Int?
+    public let firstQuestionText: String?
+}
+
+public struct AttentionItem: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let sourceKind: AttentionSourceKind
+    public let subject: AttentionSubject
+    public let relatedIssue: AttentionSubject?
+    public let whyNow: String?
+    public let activityAt: Date?
+    public let detail: AttentionDetail?
+}
+
+/// Response of `GET /api/companies/:id/attention`.
+public struct AttentionFeed: Decodable, Equatable, Sendable {
+    public let items: [AttentionItem]
+}
+
+// MARK: - Dashboard
+
+/// Response of `GET /api/companies/:id/dashboard` (the counts the app shows).
+public struct Dashboard: Decodable, Equatable, Sendable {
+    public struct Agents: Decodable, Equatable, Sendable {
+        public let active: Int
+        public let running: Int
+        public let paused: Int
+        public let error: Int
+    }
+
+    public struct Tasks: Decodable, Equatable, Sendable {
+        public let open: Int
+        public let inProgress: Int
+        public let blocked: Int
+        public let done: Int
+    }
+
+    public let agents: Agents
+    public let tasks: Tasks
+    public let pendingApprovals: Int?
+}
