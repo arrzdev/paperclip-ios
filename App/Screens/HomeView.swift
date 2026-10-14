@@ -6,7 +6,7 @@ struct HomeView: View {
     let accountID: UUID
 
     @Environment(AccountStore.self) private var store
-    @State private var selection: AppTab = .inbox
+    @State private var selection: AppTab = .today
 
     var body: some View {
         TabView(selection: $selection) {
@@ -24,7 +24,7 @@ struct HomeView: View {
     private func screen(for tab: AppTab) -> some View {
         switch tab {
         case .today:
-            ComingSoonView(tab: tab, message: "What needs you today comes in a later version.")
+            TodayView(store: store, accountID: accountID)
         case .inbox:
             InboxView(store: store, accountID: accountID)
         case .tasks:
