@@ -29,7 +29,7 @@ struct TaskDetailModelTests {
     static let c2 = comment("c-2", body: "Looks good, go.", at: "2026-10-14T09:10:00.000Z", agent: false)
     static let c3 = comment("c-3", body: "Merged.", at: "2026-10-14T09:20:00.000Z")
 
-    static let document = #"[{"id":"doc-1","companyId":"company-1","issueId":"issue-1","key":"product-spec","title":"Product spec","format":"markdown","body":"# Spec\n\nHello","latestRevisionNumber":3,"createdAt":"2026-10-14T08:00:00.000Z","updatedAt":"2026-10-14T08:30:00.000Z"}]"#
+    static let document = ##"[{"id":"doc-1","companyId":"company-1","issueId":"issue-1","key":"product-spec","title":"Product spec","format":"markdown","body":"# Spec\n\nHello","latestRevisionNumber":3,"createdAt":"2026-10-14T08:00:00.000Z","updatedAt":"2026-10-14T08:30:00.000Z"}]"##
     static let attachment = #"[{"id":"att-1","companyId":"company-1","issueId":"issue-1","issueCommentId":"c-2","contentType":"image/png","byteSize":8,"originalFilename":"screenshot.png","contentPath":"/api/attachments/att-1/content","createdAt":"2026-10-14T09:10:00.000Z"}]"#
     static let agents = #"[{"id":"agent-1","companyId":"company-1","name":"Luis","role":"ceo","title":"CEO","status":"running"},{"id":"agent-2","companyId":"company-1","name":"Marta","role":"cto","title":"CTO","status":"idle"}]"#
     static func liveRun(agentName: String) -> String {
