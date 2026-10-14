@@ -41,11 +41,12 @@ public struct APIClient: Sendable {
         _ method: Method,
         _ path: String,
         query: [URLQueryItem] = [],
-        body: (any Encodable)? = nil
+        body: (any Encodable)? = nil,
+        accept: String = "application/json"
     ) async throws -> Data {
         var request = URLRequest(url: server.apiURL(path: path, query: query))
         request.httpMethod = method.rawValue
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         if let apiKey {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
