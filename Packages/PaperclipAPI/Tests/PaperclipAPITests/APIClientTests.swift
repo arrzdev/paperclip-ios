@@ -303,4 +303,61 @@ struct APIClientTests {
         _ = try await client.comments(issueId: "a/b")
         #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/issues/a%2Fb/comments")
     }
+
+    // MARK: - Photo comments
+
+    @Test func uploadAttachmentIsMultipartWithTheFileField() async throws {
+        try stub("attachment", status: 201)
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let attachment = try await client.uploadAttachment(
+            companyId: "company-1", issueId: "issue-1",
+            AttachmentUpload(data: png, filename: "screenshot.png", contentType: "image/png")
+        )
+
+        #expect(attachment.id == "00000000-0000-4000-8000-000000000040")
+        #expect(attachment.contentType == "image/png")
+        #expect(attachment.contentPath == "/api/attachments/00000000-0000-4000-8000-000000000040/content")
+
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/companies/company-1/issues/issue-1/attachments")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer pcp_board_TEST")
+        let contentType = try #require(request.value(forHTTPHeaderField: "Content-Type"))
+        #expect(contentType.hasPrefix("multipart/form-data; boundary="))
+        let boundary = String(contentType.dropFirst("multipart/form-data; boundary=".count))
+        #expect(!boundary.isEmpty)
+
+        // One part, field "file", with the name, type and bytes; then the closing boundary.
+        let body = try #require(request.httpBody)
+        let head = Data((
+            "--\(boundary)\r\n"
+            + "Content-Disposition: form-data; name=\"file\"; filename=\"screenshot.png\"\r\n"
+            + "Content-Type: image/png\r\n\r\n"
+        ).utf8)
+        #expect(body == head + png + Data("\r\n--\(boundary)--\r\n".utf8))
+    }
+
+    @Test func uploadAttachmentErrorsMapToAPIError() async throws {
+        StubURLProtocol.respond { _ in
+            .init(status: 422, body: Data(#"{"error":"Attachment is larger than the 10 MB limit"}"#.utf8))
+        }
+        await #expect(throws: APIError.server(status: 422, body: "Attachment is larger than the 10 MB limit")) {
+            _ = try await client.uploadAttachment(
+                companyId: "company-1", issueId: "issue-1",
+                AttachmentUpload(data: Data([1]), filename: "big.jpg", contentType: "image/jpeg")
+            )
+        }
+    }
+
+    @Test func commentLinksUploadedAttachments() async throws {
+        try stub("comment", status: 201)
+        let requestID = UUID()
+        _ = try await client.addComment(
+            issueId: "issue-1",
+            NewComment(body: "See screenshot", attachmentIds: ["att-1"], clientRequestId: requestID)
+        )
+        let sent = try jsonBody(StubURLProtocol.lastRequest)
+        #expect(sent["attachmentIds"] as? [String] == ["att-1"])
+        #expect(sent["clientRequestId"] as? String == requestID.uuidString.lowercased())
+    }
 }
