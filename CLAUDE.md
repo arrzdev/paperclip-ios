@@ -108,6 +108,12 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   (`isUnreadForMe`), Mine (assigned to or created by me) and All filter it locally. New comments
   bump an issue's `updatedAt`, so the delta poll sees new replies. Read or archive done in another
   client shows up on the next full fetch.
+- Today: "Needs you" = attention items of kind interaction, approval and review
+  (`GET /companies/:id/attention`) plus my open tasks; "New replies" = unread threads
+  (`unreadForUserId=me`), at most 10, preview = first line of the newest comment not written by
+  me (`GET /issues/:id/comments?limit=5`); pulse = running agents and blocked tasks from
+  `GET /companies/:id/dashboard` plus tasks completed today. A failed pulse hides only the pulse.
+  Until task detail exists, cards open the issue in the web UI.
 
 ## Tests
 
