@@ -13,6 +13,9 @@ struct HomeView: View {
             ForEach(AppTab.allCases, id: \.self) { tab in
                 NavigationStack {
                     screen(for: tab)
+                        .navigationDestination(for: TaskRoute.self) { route in
+                            TaskDetailView(store: store, accountID: accountID, issueID: route.issueID)
+                        }
                 }
                 .tabItem { Label(tab.title, systemImage: tab.systemImage) }
                 .tag(tab)

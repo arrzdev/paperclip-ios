@@ -15,7 +15,7 @@ struct NeedsYouCard: Equatable, Identifiable, Sendable {
     let detail: String?
     /// The issue the card belongs to; nil for an approval without one.
     let issueID: String?
-    /// Path in the web UI; Open goes there until task detail exists.
+    /// Path in the web UI; Open goes there when the card has no issue.
     let webPath: String?
 }
 
