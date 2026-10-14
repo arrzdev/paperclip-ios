@@ -2,6 +2,7 @@ import PaperclipAPI
 import SwiftUI
 
 /// Threads the user touched, in three segments, refreshed by polling while on screen.
+/// Swipe right marks read / unread, swipe left archives; both can be undone.
 @MainActor
 struct InboxView: View {
     @State private var model: InboxModel
@@ -15,10 +16,31 @@ struct InboxView: View {
             if case .loaded(let rows) = model.state {
                 ForEach(rows) { row in
                     InboxRowView(row: row)
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                Task { await model.toggleRead(row) }
+                            } label: {
+                                if row.isUnread {
+                                    Label("Read", systemImage: "envelope.open")
+                                } else {
+                                    Label("Unread", systemImage: "envelope.badge")
+                                }
+                            }
+                            .tint(.blue)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button {
+                                Task { await model.archive(row) }
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
+                            }
+                            .tint(.indigo)
+                        }
                 }
             }
         }
         .listStyle(.plain)
+        .animation(.default, value: model.state)
         .overlay { overlay }
         .safeAreaInset(edge: .top, spacing: 0) {
             Picker("Segment", selection: $model.segment) {
@@ -30,6 +52,30 @@ struct InboxView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
             .background(.bar)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 8) {
+                if let message = model.actionError {
+                    ActionErrorBanner(message: message) { model.dismissActionError() }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if let undo = model.undo {
+                    UndoToast(undo: undo) {
+                        Task { await model.undoLast() }
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            .animation(.snappy, value: model.undo)
+            .animation(.snappy, value: model.actionError)
+        }
+        .task(id: model.undo) {
+            guard let undo = model.undo else { return }
+            let wait = max(0, undo.expiresAt.timeIntervalSinceNow)
+            try? await Task.sleep(for: .seconds(wait))
+            model.clearExpiredUndo()
         }
         .searchable(text: $model.searchText, prompt: "Title or ID")
         .refreshable { await model.refresh() }
@@ -86,6 +132,52 @@ struct InboxView: View {
         case .mine: "No thread is assigned to you or created by you."
         case .all: "Threads you take part in show up here."
         }
+    }
+}
+
+private struct UndoToast: View {
+    let undo: InboxUndo
+    let onUndo: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(undo.action.title)
+                .font(.subheadline)
+            Spacer()
+            Button("Undo", action: onUndo)
+                .font(.subheadline.weight(.semibold))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: .capsule)
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+    }
+}
+
+private struct ActionErrorBanner: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.footnote)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.semibold))
+            }
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: .rect(cornerRadius: 12))
     }
 }
 
