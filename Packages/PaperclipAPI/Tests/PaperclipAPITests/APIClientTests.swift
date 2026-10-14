@@ -130,6 +130,34 @@ struct APIClientTests {
         #expect(issues[1].priority == .unknown("urgent"))
     }
 
+    @Test func inboxHidesArchivedAndDecodesReadStateForTheSignedInUser() async throws {
+        try stub("inbox-issues")
+        let issues = try await client.issues(companyId: "company-1", query: .inbox)
+
+        let url = try #require(StubURLProtocol.lastRequest?.url)
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(items.contains(URLQueryItem(name: "touchedByUserId", value: "me")))
+        #expect(items.contains(URLQueryItem(name: "inboxArchivedByUserId", value: "me")))
+
+        #expect(issues.count == 2)
+        #expect(issues[0].isUnreadForMe == true)
+        #expect(issues[0].lastExternalCommentAt == PaperclipDate.parse("2026-10-08T12:42:48.568Z"))
+        #expect(issues[0].myLastTouchAt == PaperclipDate.parse("2026-10-08T10:00:00.000Z"))
+        #expect(issues[0].createdByUserId == nil)
+        #expect(issues[1].isUnreadForMe == false)
+        #expect(issues[1].createdByUserId == "user-1")
+        #expect(issues[1].completedAt == PaperclipDate.parse("2026-10-05T16:25:56.507Z"))
+    }
+
+    @Test func readStateIsOptionalOutsideTheInbox() async throws {
+        // Lists without a user filter carry no per-user fields.
+        try stub("issues")
+        let issues = try await client.issues(companyId: "company-1")
+        #expect(issues[0].isUnreadForMe == nil)
+        #expect(issues[0].lastExternalCommentAt == nil)
+        #expect(issues[0].completedAt == PaperclipDate.parse("2026-10-08T12:41:38.075Z"))
+    }
+
     @Test func updateIssueSendsOnlySetFields() async throws {
         let list = try #require(JSONSerialization.jsonObject(with: try fixture("issues")) as? [Any])
         let body = try JSONSerialization.data(withJSONObject: list[0])

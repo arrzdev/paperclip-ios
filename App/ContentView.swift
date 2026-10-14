@@ -29,11 +29,8 @@ struct ContentView: View {
             }
             .id(id)
         case .home(let id):
-            NavigationStack {
-                HomePlaceholderView(accountID: id)
-                    .settingsButton()
-            }
-            .id(id)
+            HomeView(accountID: id)
+                .id(id)
         }
     }
 }

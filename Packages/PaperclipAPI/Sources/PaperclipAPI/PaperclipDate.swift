@@ -10,10 +10,15 @@ enum PaperclipDate {
         return ISO8601DateFormatter().date(from: text)
     }
 
+    /// Always three fraction digits, rounded to the millisecond. The formatter's
+    /// own fraction truncates, so a parsed `.123` could come back as `.122`;
+    /// `updatedSince` must echo the server's timestamp exactly.
     static func format(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+        let milliseconds = (date.timeIntervalSince1970 * 1000).rounded()
+        let seconds = (milliseconds / 1000).rounded(.down)
+        let fraction = Int(milliseconds - seconds * 1000)
+        let whole = ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: seconds))
+        return String(whole.dropLast()) + String(format: ".%03dZ", fraction)
     }
 
     static let decoder: JSONDecoder = {

@@ -9,6 +9,14 @@ struct AccountsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var signInSheet: SignInSheet?
     @State private var errorMessage: String?
+    private let title: String
+    /// False in the Me tab, where there is no sheet to close.
+    private let showsDoneButton: Bool
+
+    init(title: String = "Settings", showsDoneButton: Bool = true) {
+        self.title = title
+        self.showsDoneButton = showsDoneButton
+    }
 
     var body: some View {
         List {
@@ -52,10 +60,12 @@ struct AccountsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("Settings")
+        .navigationTitle(title)
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
+            if showsDoneButton {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
         .sheet(item: $signInSheet) { sheet in

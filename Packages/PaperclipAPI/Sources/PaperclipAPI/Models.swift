@@ -202,11 +202,18 @@ public struct Issue: Decodable, Equatable, Identifiable, Sendable {
     public let priority: IssuePriority
     public let assigneeAgentId: String?
     public let assigneeUserId: String?
+    public let createdByUserId: String?
     public let projectId: String?
     public let parentId: String?
     public let createdAt: Date
     public let updatedAt: Date
+    public let completedAt: Date?
     public let lastActivityAt: Date?
+    // Per-user read state: sent only when the list is filtered by a user
+    // (`touchedByUserId`, `unreadForUserId`, …), so nil elsewhere.
+    public let isUnreadForMe: Bool?
+    public let lastExternalCommentAt: Date?
+    public let myLastTouchAt: Date?
 }
 
 /// Fields the app can change with `PATCH /api/issues/:id`. Nil fields are not sent.
@@ -253,6 +260,7 @@ public struct IssueListQuery: Equatable, Sendable {
     public static var inbox: IssueListQuery {
         var query = IssueListQuery()
         query.touchedByUserId = "me"
+        query.inboxArchivedByUserId = "me"
         return query
     }
 
