@@ -179,6 +179,21 @@ func tempAccountsFile() -> URL {
     FileManager.default.temporaryDirectory.appendingPathComponent("accounts-\(UUID().uuidString).json")
 }
 
+/// An accounts file whose folder is a regular file, so every save throws.
+func unwritableAccountsFile() -> URL {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("accounts-\(UUID().uuidString)")
+    try? makeUnwritable(folder)
+    return folder.appendingPathComponent("accounts.json")
+}
+
+/// Replaces `folder` with a regular file: creating the folder, and so saving into it, then fails.
+func makeUnwritable(_ folder: URL) throws {
+    if FileManager.default.fileExists(atPath: folder.path) {
+        try FileManager.default.removeItem(at: folder)
+    }
+    try Data().write(to: folder)
+}
+
 // MARK: - Fakes
 
 /// In-memory Keychain whose writes can be made to fail.
