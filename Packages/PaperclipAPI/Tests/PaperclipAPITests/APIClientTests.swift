@@ -194,6 +194,58 @@ struct APIClientTests {
         #expect(badges.inbox == 3)
     }
 
+    @Test func attentionFeedDecodesCardsAndUnknownKinds() async throws {
+        try stub("attention")
+        let feed = try await client.attention(companyId: "company-1")
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/companies/company-1/attention")
+
+        #expect(feed.items.map(\.id) == ["att-1", "att-2", "att-3", "att-4"])
+        let interaction = feed.items[0]
+        #expect(interaction.sourceKind == .issueThreadInteraction)
+        #expect(interaction.subject.kind == "interaction")
+        #expect(interaction.subject.title == "Approve the plan?")
+        #expect(interaction.relatedIssue?.id == "00000000-0000-4000-8000-0000000000a1")
+        #expect(interaction.relatedIssue?.identifier == "PAP-12")
+        #expect(interaction.relatedIssue?.href == "/PAP/issues/PAP-12")
+        #expect(interaction.detail?.kind == "confirmation")
+        #expect(interaction.detail?.promptExcerpt == "Send the plan to the board?")
+        #expect(interaction.whyNow == "Waiting for your answer")
+        #expect(interaction.activityAt == PaperclipDate.parse("2026-10-14T09:30:00.000Z"))
+
+        #expect(feed.items[1].sourceKind == .approval)
+        #expect(feed.items[1].relatedIssue == nil)
+        #expect(feed.items[1].detail?.summaryExcerpt == "Designer for the landing page")
+        #expect(feed.items[2].sourceKind == .failedRun)
+        // A newer server's kinds decode instead of failing the whole feed.
+        #expect(feed.items[3].sourceKind == .unknown("brand_new_kind"))
+        #expect(feed.items[3].detail?.kind == "brand_new_detail")
+    }
+
+    @Test func dashboardCounts() async throws {
+        try stub("dashboard")
+        let dashboard = try await client.dashboard(companyId: "company-1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/companies/company-1/dashboard")
+        #expect(dashboard.agents.running == 3)
+        #expect(dashboard.agents.active == 5)
+        #expect(dashboard.tasks.blocked == 2)
+        #expect(dashboard.tasks.inProgress == 4)
+        #expect(dashboard.pendingApprovals == 1)
+    }
+
+    @Test func latestCommentsWithLimit() async throws {
+        let comment = try fixture("comment")
+        let body = Data("[".utf8) + comment + Data("]".utf8)
+        StubURLProtocol.respond { _ in .init(body: body) }
+
+        let comments = try await client.comments(issueId: "PAP-12", limit: 5)
+
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/issues/PAP-12/comments?limit=5")
+        #expect(comments.map(\.body) == ["Looks good"])
+        #expect(comments[0].authorUserId == "user-1")
+    }
+
     @Test func errorsMapToAPIError() async throws {
         StubURLProtocol.respond { _ in .init(status: 401, body: Data(#"{"error":"Unauthorized"}"#.utf8)) }
         await #expect(throws: APIError.unauthorized) { try await client.me() }
