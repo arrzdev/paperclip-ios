@@ -62,6 +62,46 @@ struct AccountStoreTests {
         #expect(try credentials.apiKey(for: first.id) == JSON.key)
     }
 
+    @Test func aNewSignInThatCannotBeSavedLeavesNoAccountAndNoKey() throws {
+        let file = unwritableAccountsFile()
+        let credentials = InMemoryCredentialStore()
+        let store = makeStore(file: file, credentials: credentials)
+
+        #expect(throws: (any Error).self) {
+            try store.saveSignIn(server: StubServer().address, me: try decodeMe(), apiKey: JSON.key, approvedAt: approvedAt)
+        }
+
+        #expect(store.accounts.isEmpty)
+        #expect(store.currentAccountID == nil)
+        #expect(credentials.storedKeyCount == 0)
+        #expect(store.route == .addServer)
+    }
+
+    @Test func aReSignInThatCannotBeSavedKeepsTheOldKeyAndAccount() throws {
+        let a = StubServer()
+        let b = StubServer()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("accounts-\(UUID().uuidString)")
+        let credentials = InMemoryCredentialStore()
+        let store = makeStore(file: folder.appendingPathComponent("accounts.json"), credentials: credentials)
+        let accountA = try store.saveSignIn(server: a.address, me: try decodeMe(), apiKey: "pcp_board_OLD", approvedAt: approvedAt)
+        try store.selectCompany("company-1", for: accountA.id)
+        let accountB = try store.saveSignIn(server: b.address, me: try decodeMe(), apiKey: "pcp_board_B", approvedAt: approvedAt)
+        let accountsBefore = store.accounts
+        try makeUnwritable(folder)
+
+        #expect(throws: (any Error).self) {
+            try store.saveSignIn(
+                server: a.address, me: try decodeMe(), apiKey: JSON.key,
+                approvedAt: approvedAt.addingTimeInterval(24 * 60 * 60)
+            )
+        }
+
+        #expect(try credentials.apiKey(for: accountA.id) == "pcp_board_OLD")
+        #expect(try credentials.apiKey(for: accountB.id) == "pcp_board_B")
+        #expect(store.accounts == accountsBefore)
+        #expect(store.currentAccountID == accountB.id)
+    }
+
     @Test func switchingAccountChangesTheClientServerAndKey() throws {
         let a = StubServer()
         let b = StubServer()
