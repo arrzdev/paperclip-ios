@@ -8,10 +8,12 @@ import XCTest
 /// `AccessibilityBaseline.json` lists its kind for that screen (the kinds
 /// already known there; the audit's exact findings vary between runs, so it
 /// holds kinds, not counts). Fixing a kind on a screen removes it there; a new
-/// kind on a screen fails. An element partly under the tab bar, the
-/// navigation bar or Today's message bar (or off screen) is judged against
-/// the bar's glass, not its own background: its issues are listed as
-/// "covered" and do not count.
+/// kind on a screen fails. Dynamic Type support does not depend on the
+/// variant and the audit reports it unevenly between them, so that kind,
+/// known for a screen in one variant, is known in all of them. An element
+/// partly under the tab bar, the navigation bar or Today's message bar (or
+/// off screen) is judged against the bar's glass, not its own background: its
+/// issues are listed as "covered" and do not count.
 @MainActor
 final class ScreenTourUITests: XCTestCase {
     func testDefaultSize() {
@@ -131,7 +133,7 @@ final class ScreenTourUITests: XCTestCase {
     /// Runs the accessibility audit; every issue goes into a text attachment.
     /// A timed-out audit is retried once.
     private func audit(_ app: XCUIApplication, screen: String) {
-        let known = Set(Self.baseline[screen] ?? [])
+        let known = Self.knownKinds(for: screen)
         var lines: [String] = []
         for attempt in 1...2 {
             lines = []
@@ -220,6 +222,27 @@ final class ScreenTourUITests: XCTestCase {
         if let messageBar, messageBar.contains(frame) { return false }
         if !screen.isEmpty, !screen.contains(frame) { return true }
         return covers.contains { $0.intersects(frame) }
+    }
+
+    /// The audit's kind for text that does not follow the text size.
+    static let dynamicTypeKind = "Dynamic Type font sizes are partially unsupported"
+
+    /// The kinds known for `screen` ("<variant> <screen>"): its own, plus
+    /// the Dynamic Type kind when any variant of the same screen lists it.
+    static func knownKinds(for screen: String) -> Set<String> {
+        var known = Set(baseline[screen] ?? [])
+        let name = screenName(screen)
+        let dynamicTypeKnown = baseline.contains { key, kinds in
+            screenName(key) == name && kinds.contains(dynamicTypeKind)
+        }
+        if dynamicTypeKnown { known.insert(dynamicTypeKind) }
+        return known
+    }
+
+    /// "Me-Accounts" for "dark Me-Accounts".
+    static func screenName(_ screen: String) -> String {
+        guard let space = screen.firstIndex(of: " ") else { return screen }
+        return String(screen[screen.index(after: space)...])
     }
 
     /// Known audit issue kinds per screen ("<variant> <screen>").
