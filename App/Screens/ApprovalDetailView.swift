@@ -266,7 +266,7 @@ private struct DecisionSheet: View {
     }
 }
 
-private extension ApprovalStatus {
+extension ApprovalStatus {
     var label: String {
         switch self {
         case .pending: "Pending"
