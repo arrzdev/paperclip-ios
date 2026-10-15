@@ -396,6 +396,8 @@ public struct LiveRun: Decodable, Equatable, Identifiable, Sendable {
     public let agentName: String?
     public let startedAt: Date?
     public let createdAt: Date?
+    /// The task the run works on (company live runs only).
+    public let issueId: String?
 }
 
 /// A new task from the New task sheet (`POST /api/companies/:id/issues`).
@@ -453,13 +455,136 @@ public struct Project: Decodable, Equatable, Identifiable, Sendable {
 
 // MARK: - Agents
 
-/// An agent of a company (`GET /api/companies/:id/agents`), for the assignee picker.
+/// An agent of a company (`GET /api/companies/:id/agents`, `GET /api/agents/:id`).
 public struct Agent: Decodable, Equatable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let role: String?
     public let title: String?
     public let status: String?
+    public let pauseReason: String?
+    public let pausedAt: Date?
+    public let lastHeartbeatAt: Date?
+    /// The agent's page in the web UI: `/<prefix>/agents/<urlKey>`.
+    public let urlKey: String?
+
+    /// `status` as an enum; a missing status is `.unknown("")`.
+    public var agentStatus: AgentStatus {
+        AgentStatus(rawValue: status ?? "")
+    }
+}
+
+public enum AgentStatus: Hashable, Sendable {
+    case active, idle, running, paused, error, pendingApproval, terminated
+    case unknown(String)
+
+    private static let known: [(AgentStatus, String)] = [
+        (.active, "active"),
+        (.idle, "idle"),
+        (.running, "running"),
+        (.paused, "paused"),
+        (.error, "error"),
+        (.pendingApproval, "pending_approval"),
+        (.terminated, "terminated"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+}
+
+// MARK: - Run log
+
+/// One page of a run's log (`GET /api/heartbeat-runs/:id/log`). `content` is
+/// NDJSON; `nextOffset` is set only when more bytes follow.
+public struct RunLog: Decodable, Equatable, Sendable {
+    public let runId: String
+    public let content: String
+    public let nextOffset: Int?
+
+    /// The complete lines of `text` and what follows the last newline (a line
+    /// cut at the page end, to put in front of the next page). Each field is
+    /// read on its own: a line that is not JSON is kept as `stdout` text.
+    public static func parse(_ text: String) -> (lines: [RunLogLine], remainder: String) {
+        var parts = text.components(separatedBy: "\n")
+        let remainder = parts.removeLast()
+        let lines = parts.filter { !$0.isEmpty }.map(RunLogLine.init(rawLine:))
+        return (lines, remainder)
+    }
+}
+
+public struct RunLogLine: Equatable, Sendable {
+    public let seq: Int?
+    public let ts: Date?
+    public let stream: String
+    /// The chunk without its trailing newline.
+    public let text: String
+
+    public init(seq: Int?, ts: Date?, stream: String, text: String) {
+        self.seq = seq
+        self.ts = ts
+        self.stream = stream
+        self.text = text
+    }
+
+    init(rawLine: String) {
+        guard let object = (try? JSONSerialization.jsonObject(with: Data(rawLine.utf8))) as? [String: Any],
+              let chunk = object["chunk"] as? String else {
+            self.init(seq: nil, ts: nil, stream: "stdout", text: rawLine)
+            return
+        }
+        var text = chunk
+        while text.hasSuffix("\n") || text.hasSuffix("\r") {
+            text.removeLast()
+        }
+        self.init(
+            seq: object["seq"] as? Int,
+            ts: (object["ts"] as? String).flatMap(PaperclipDate.parse),
+            stream: object["stream"] as? String ?? "stdout",
+            text: text
+        )
+    }
+}
+
+// MARK: - Activity, goals, costs
+
+/// One entry of the company activity feed (`GET /api/companies/:id/activity`).
+public struct ActivityEvent: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    /// `agent`, `user` or `system`.
+    public let actorType: String
+    public let actorId: String
+    /// Dotted, e.g. `issue.comment_added`.
+    public let action: String
+    public let entityType: String
+    public let entityId: String
+    public let agentId: String?
+    /// Free form; tasks carry `identifier` and `issueTitle`.
+    public let details: JSONValue?
+    public let createdAt: Date
+}
+
+/// A company goal (`GET /api/companies/:id/goals`). Level and status stay text.
+public struct Goal: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let title: String
+    public let description: String?
+    public let level: String?
+    public let status: String?
+    public let parentId: String?
+    public let ownerAgentId: String?
+}
+
+/// `GET /api/companies/:id/costs/summary`. A budget of 0 means none.
+public struct CostSummary: Decodable, Equatable, Sendable {
+    public let spendCents: Int
+    public let budgetCents: Int
+    public let utilizationPercent: Double
 }
 
 // MARK: - Attention (what needs the board)

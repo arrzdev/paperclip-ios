@@ -193,7 +193,7 @@ struct TaskDetailView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if model.showsReviewBar {
-                HStack(spacing: 12) {
+                ButtonRow(spacing: 12) {
                     Button {
                         model.dismissActionError()
                         showsReopen = true
@@ -314,10 +314,10 @@ private struct CommentRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveRow {
                 Text(author)
                     .font(.subheadline.weight(.semibold))
-                Spacer()
+            } trailing: {
                 Text(comment.createdAt, format: .relative(presentation: .named))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -349,6 +349,7 @@ private struct AttachmentThumbnail: View {
     let attachment: Attachment
     let model: TaskDetailModel
     @State private var image: UIImage?
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 88
 
     var body: some View {
         ZStack {
@@ -365,7 +366,7 @@ private struct AttachmentThumbnail: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: 88, height: 88)
+        .frame(width: size, height: size)
         .clipShape(.rect(cornerRadius: 8))
         .accessibilityLabel(attachment.originalFilename ?? "Attachment")
         .task(id: attachment.id) {
@@ -379,10 +380,10 @@ private struct AttachmentRow: View {
     let attachment: Attachment
 
     var body: some View {
-        HStack {
+        AdaptiveRow {
             Label(attachment.originalFilename ?? "Attachment", systemImage: attachment.isImage ? "photo" : "doc")
-                .lineLimit(1)
-            Spacer()
+                .lineLimit(2)
+        } trailing: {
             if let size = attachment.byteSize {
                 Text(Int64(size), format: .byteCount(style: .file))
                     .font(.caption)

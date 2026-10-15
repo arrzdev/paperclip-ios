@@ -54,24 +54,35 @@ struct TasksView: View {
         let assignee: TaskAssigneeFilter
     }
 
+    /// Side by side, or stacked when large text does not fit.
     private var filterBar: some View {
-        HStack(spacing: 4) {
-            Picker("Status", selection: $model.status) {
-                ForEach(TaskStatusFilter.allCases, id: \.self) { filter in
-                    Text(filter.title).tag(filter)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 4) {
+                filterPickers
+                Spacer(minLength: 0)
             }
-            Picker("Assignee", selection: $model.assignee) {
-                ForEach(model.assigneeOptions, id: \.self) { option in
-                    Text(model.assigneeTitle(option)).tag(option)
-                }
+            VStack(alignment: .leading, spacing: 0) {
+                filterPickers
             }
-            Spacer(minLength: 0)
         }
         .pickerStyle(.menu)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(.bar)
+    }
+
+    @ViewBuilder
+    private var filterPickers: some View {
+        Picker("Status", selection: $model.status) {
+            ForEach(TaskStatusFilter.allCases, id: \.self) { filter in
+                Text(filter.title).tag(filter)
+            }
+        }
+        Picker("Assignee", selection: $model.assignee) {
+            ForEach(model.assigneeOptions, id: \.self) { option in
+                Text(model.assigneeTitle(option)).tag(option)
+            }
+        }
     }
 
     private var loadMoreRow: some View {
@@ -137,11 +148,11 @@ private struct TaskRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveRow {
                 Text(issue.identifier ?? "")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
-                Spacer()
+            } trailing: {
                 Text(issue.status.label)
                     .font(.caption)
                     .foregroundStyle(.secondary)

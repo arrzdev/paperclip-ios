@@ -13,11 +13,14 @@ struct AccountsView: View {
     private let title: String
     /// False in the Me tab, where there is no sheet to close.
     private let showsDoneButton: Bool
+    /// Me → More (the Me tab only).
+    private let more: MoreModel?
 
-    init(model: AccountsModel, title: String = "Settings", showsDoneButton: Bool = true) {
+    init(model: AccountsModel, title: String = "Settings", showsDoneButton: Bool = true, more: MoreModel? = nil) {
         _model = State(initialValue: model)
         self.title = title
         self.showsDoneButton = showsDoneButton
+        self.more = more
     }
 
     var body: some View {
@@ -56,6 +59,10 @@ struct AccountsView: View {
                     Text(errorMessage)
                         .foregroundStyle(.red)
                 }
+            }
+
+            if let more {
+                MoreSection(model: more)
             }
 
             Section {

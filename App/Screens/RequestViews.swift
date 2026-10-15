@@ -24,7 +24,7 @@ struct RequestButtons: View {
     let onOpenInWeb: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        ButtonRow {
             switch card.action {
             case .confirm(let acceptLabel, let rejectLabel, _):
                 Button(acceptLabel) {
@@ -49,7 +49,6 @@ struct RequestButtons: View {
             }
         }
         .controlSize(.small)
-        .lineLimit(1)
     }
 }
 
@@ -63,11 +62,11 @@ struct RequestRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveRow {
                 Label("Request", systemImage: "questionmark.bubble")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tint)
-                Spacer()
+            } trailing: {
                 Text(card.createdAt, format: .relative(presentation: .named))
                     .font(.caption)
                     .foregroundStyle(.secondary)

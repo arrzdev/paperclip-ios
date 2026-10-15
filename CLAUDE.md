@@ -181,6 +181,27 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   company = `switchTo(accountID:companyID:)` (both persisted; `HomeView` is keyed by account and
   company, so Today reloads). Swipe a server: Sign out (`AccountStore.signOut`, key deleted, server
   stays to sign in again) or Remove. No change to `AccountStore` / `SignInFlow` for this screen.
+- Me → More (read only, spec §3; Agents live here, not in a tab). `MoreModel` loads the company
+  (`GET /companies/:id`) for its prefix; `WebLink` builds "Open in web" pages
+  (`/<prefix>/…`) for everything the app cuts (company settings, secrets, tool connections,
+  plugins, skills, routines, org chart, hire agent) and for each agent (`agents/<urlKey>`).
+  - Agents (`AgentsModel`): `GET /companies/:id/agents` (terminated left out) plus
+    `GET /companies/:id/live-runs` (an extra: a failure only loses the runs), polled every 15 s.
+    Agent detail (`AgentDetailModel`, `AgentRoute`): `GET /agents/:id`, its live run; Pause unless
+    paused / terminated / pending approval, Resume only when paused
+    (`POST /agents/:id/{pause,resume}`); the server's answer replaces the agent, an error (a 409
+    for a broken reporting chain) keeps it and shows the reason.
+  - Run log (`RunLogModel`): `GET /heartbeat-runs/:id/log` in pages of `RunLogModel.pageBytes`
+    from offset 0; `content` is NDJSON `{ts, stream, chunk, seq}` (`RunLog.parse`, lenient per
+    field; a line cut at a page end is carried to the next page). Load more = `nextOffset`; a live
+    run polls on from the end; a 404 = no output yet (`empty`). Never log the log text.
+  - Activity (`ActivityModel`): `GET /companies/:id/activity?limit=100`, actor name (agents are an
+    extra), humanised `action` plus the task identifier and title; issue events open the task.
+  - Approvals history (`ApprovalsHistoryModel`): all statuses, newest first, opens `ApprovalRoute`.
+  - Goals (`GoalsModel`): `GET /companies/:id/goals` as a tree in server order (`GoalRow.depth`);
+    a missing parent puts the goal at the root, a cycle never hides or repeats a goal.
+  - Costs (`CostsModel`): `GET /companies/:id/costs/summary` → `CostLine` ("$12.34 of $50.00 ·
+    25%", or "No budget" when the budget is 0).
 
 ## Tests
 
