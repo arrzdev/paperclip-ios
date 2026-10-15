@@ -7,9 +7,11 @@ import SwiftUI
 @MainActor
 struct InboxView: View {
     @State private var model: InboxModel
+    private let onNewTask: (() -> Void)?
 
-    init(store: AccountStore, accountID: UUID) {
+    init(store: AccountStore, accountID: UUID, onNewTask: (() -> Void)? = nil) {
         _model = State(initialValue: InboxModel(store: store, accountID: accountID))
+        self.onNewTask = onNewTask
     }
 
     var body: some View {
@@ -45,6 +47,7 @@ struct InboxView: View {
         .listStyle(.plain)
         .animation(.default, value: model.state)
         .overlay { overlay }
+        .newTaskButton(onNewTask)
         .safeAreaInset(edge: .top, spacing: 0) {
             Picker("Segment", selection: $model.segment) {
                 ForEach(InboxSegment.allCases, id: \.self) { segment in

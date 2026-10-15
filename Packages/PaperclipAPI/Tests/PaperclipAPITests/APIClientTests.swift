@@ -706,4 +706,61 @@ struct APIClientTests {
             _ = try await client.decideApproval(id: "a-1", .requestRevision, note: nil)
         }
     }
+
+    // MARK: New task
+
+    @Test func createIssueSendsOnlyTheSheetFields() async throws {
+        try stub("issue", status: 201)
+        let issue = try await client.createIssue(companyId: "company-1", NewIssue(
+            title: "Fix the login",
+            description: "Steps:\n1. Open the app",
+            assigneeAgentId: "00000000-0000-4000-8000-000000000008",
+            projectId: "00000000-0000-4000-8000-000000000004",
+            idempotencyKey: "key-1"
+        ))
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/companies/company-1/issues")
+        let body = try jsonBody(request)
+        #expect(body["title"] as? String == "Fix the login")
+        #expect(body["description"] as? String == "Steps:\n1. Open the app")
+        #expect(body["status"] as? String == "todo")
+        #expect(body["assigneeAgentId"] as? String == "00000000-0000-4000-8000-000000000008")
+        #expect(body["projectId"] as? String == "00000000-0000-4000-8000-000000000004")
+        #expect(body["idempotencyKey"] as? String == "key-1")
+        // No priority, labels, blockers or user assignee from the sheet.
+        #expect(Set(body.keys) == ["title", "description", "status", "assigneeAgentId", "projectId", "idempotencyKey"])
+        #expect(issue.id == "00000000-0000-4000-8000-0000000000a1")
+        #expect(issue.identifier == "PAP-12")
+    }
+
+    @Test func createIssueLeavesOutEmptyOptionalFields() async throws {
+        try stub("issue", status: 201)
+        _ = try await client.createIssue(companyId: "company-1", NewIssue(
+            title: "Only a title", description: nil, assigneeAgentId: "agent-1", projectId: nil, idempotencyKey: "key-2"
+        ))
+        let body = try jsonBody(StubURLProtocol.lastRequest)
+        #expect(Set(body.keys) == ["title", "status", "assigneeAgentId", "idempotencyKey"])
+    }
+
+    @Test func createIssueReplayIsTheSameIssue() async throws {
+        // The server answers 200 (not 201) when the idempotency key replays an earlier create.
+        try stub("issue", status: 200)
+        let issue = try await client.createIssue(companyId: "company-1", NewIssue(
+            title: "Again", description: nil, assigneeAgentId: nil, projectId: nil, idempotencyKey: "key-1"
+        ))
+        #expect(issue.identifier == "PAP-12")
+    }
+
+    @Test func projectsForTheProjectChip() async throws {
+        try stub("projects")
+        let projects = try await client.projects(companyId: "company-1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/companies/company-1/projects")
+        #expect(projects.map(\.name) == ["Mobile app", "Website"])
+        #expect(projects.map(\.id) == ["00000000-0000-4000-8000-000000000004", "00000000-0000-4000-8000-000000000040"])
+        #expect(projects.first?.status == "in_progress")
+        // An unknown status is kept as text, never a decoding error.
+        #expect(projects.last?.status == "some_new_status")
+        #expect(projects.allSatisfy { $0.archivedAt == nil })
+    }
 }

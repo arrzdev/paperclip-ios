@@ -4,15 +4,21 @@ import SwiftUI
 /// What needs me now: "Needs you" cards, "New replies" and the pulse line,
 /// refreshed by polling while on screen. Open and a reply row push Task detail;
 /// a card without a task opens the web UI. Replies swipe like the Inbox: right
-/// marks read, left archives.
+/// marks read, left archives. The bottom bar gives a new task to the default
+/// assignee; the floating + opens the New task sheet.
 @MainActor
 struct TodayView: View {
     @State private var model: TodayModel
     @State private var requestSheet: RequestSheet?
     @Environment(\.openURL) private var openURL
+    /// The "Message <name>…" bar; nil until the account's company is known.
+    private let newTask: NewTaskModel?
+    private let onNewTask: (() -> Void)?
 
-    init(store: AccountStore, accountID: UUID) {
+    init(store: AccountStore, accountID: UUID, newTask: NewTaskModel? = nil, onNewTask: (() -> Void)? = nil) {
         _model = State(initialValue: TodayModel(store: store, accountID: accountID))
+        self.newTask = newTask
+        self.onNewTask = onNewTask
     }
 
     var body: some View {
@@ -65,6 +71,7 @@ struct TodayView: View {
         .requestSheet($requestSheet, actions: model.requests)
         .sendsPendingRequests(model.requests)
         .overlay { overlay }
+        .newTaskButton(onNewTask)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
                 if let message = model.actionError {
@@ -94,6 +101,9 @@ struct TodayView: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .transition(.opacity)
+                }
+                if let newTask {
+                    MessageBar(model: newTask)
                 }
             }
             .padding(.horizontal)
