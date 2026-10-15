@@ -64,7 +64,8 @@ struct TodayModelTests {
         attention: String? = nil,
         assigned: String = "[]",
         replies: String = "[]",
-        done: String = "[]"
+        done: String = "[]",
+        approvals: String = "[]"
     ) -> StubServer {
         let server = StubServer()
         server.on("GET", attentionPath, .ok(attention ?? Self.feed()))
@@ -72,6 +73,7 @@ struct TodayModelTests {
         server.on("GET", companyIssuesPath, query: repliesQuery, .ok(replies))
         server.on("GET", companyIssuesPath, query: doneQuery, .ok(done))
         server.on("GET", dashboardPath, .ok(Self.dashboard))
+        server.on("GET", "/api/companies/company-1/approvals", .ok(approvals))
         return server
     }
 
@@ -130,15 +132,17 @@ struct TodayModelTests {
         let mine = issueJSON(id: "issue-7", title: "Review the logo", status: "in_review", assigneeUserId: "user-1")
         // issue-1 already has a request card: no second card for it.
         let alreadyCarded = issueJSON(id: "issue-1", title: "iOS plan", status: "in_progress", assigneeUserId: "user-1")
+        // Approvals come from the approvals list, not the attention feed.
         let (model, _, _) = try today(makeServer(
-            attention: Self.feed(interaction, approval, failedRun), assigned: list(mine, alreadyCarded)
+            attention: Self.feed(interaction, approval, failedRun), assigned: list(mine, alreadyCarded),
+            approvals: list(ApprovalDetailModelTests.approval(id: "approval-1"))
         ))
         await model.refresh()
 
         let cards = try #require(content(model)).needsYou
         // Failed runs, budgets and other attention kinds are not "needs you" in the app.
         #expect(cards.map(\.kind) == [.interaction, .approval, .assignedTask])
-        #expect(cards.map(\.id) == ["att-1", "att-2", "issue-7"])
+        #expect(cards.map(\.id) == ["att-1", "approval-1", "issue-7"])
 
         #expect(cards[0].title == "iOS plan")
         #expect(cards[0].identifier == "PAP-1")
@@ -146,10 +150,9 @@ struct TodayModelTests {
         #expect(cards[0].issueID == "issue-1")
         #expect(cards[0].webPath == "/PAP/issues/PAP-1")
 
-        #expect(cards[1].title == "Hire a designer")
-        #expect(cards[1].detail == "Approval pending")
+        #expect(cards[1].title == "Approval: Hire a designer")
         #expect(cards[1].issueID == nil)
-        #expect(cards[1].webPath == "/PAP/approvals/att-2-subject")
+        #expect(cards[1].approvalRoute == ApprovalRoute(approvalID: "approval-1"))
 
         #expect(cards[2].title == "Review the logo")
         #expect(cards[2].identifier == "PAP-7")
@@ -235,13 +238,13 @@ struct TodayModelTests {
     }
 
     @Test func pulseFailureHidesOnlyThePulse() async throws {
-        let server = makeServer(attention: Self.feed(approval))
+        let server = makeServer(approvals: list(ApprovalDetailModelTests.approval(id: "approval-1")))
         server.on("GET", dashboardPath, StubServer.Response(status: 500, body: JSON.unavailable))
         let (model, _, _) = try today(server)
         await model.refresh()
 
         #expect(model.pulse == nil)
-        #expect(content(model)?.needsYou.map(\.id) == ["att-2"])
+        #expect(content(model)?.needsYou.map(\.id) == ["approval-1"])
     }
 
     // MARK: Polling

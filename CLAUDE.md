@@ -123,8 +123,9 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   then the comment sends with its `attachmentIds`. A failure keeps the draft and offers Retry;
   Retry does not upload the same photo twice and reuses the comment's `clientRequestId`, so the
   server never posts it twice. Never log the draft text or image bytes.
-- Today: "Needs you" = attention items of kind interaction, approval and review
-  (`GET /companies/:id/attention`) plus my open tasks; "New replies" = unread threads
+- Today: "Needs you" = attention items of kind interaction and review
+  (`GET /companies/:id/attention`), then pending approvals newest first
+  (`GET /companies/:id/approvals?status=pending`, card "Approval: <title>"), then my open tasks; "New replies" = unread threads
   (`unreadForUserId=me`), at most 10, preview = first line of the newest comment not written by
   me (`GET /issues/:id/comments?limit=5`); pulse = running agents and blocked tasks from
   `GET /companies/:id/dashboard` plus tasks completed today. A failed pulse hides only the pulse.
@@ -139,6 +140,13 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   toast ends, the screen goes away or another action starts. Undo sends nothing. A failure
   brings the card back with the error; a 409 means it was already answered and the card stays
   gone. Never log a reject reason or an answer.
+- Approval detail: one route, `ApprovalRoute(approvalID:)`, pushed from Today (each tab's
+  `NavigationStack` has its `.navigationDestination`). `ApprovalDetailModel` needs the approval
+  (`GET /approvals/:id`) and its comments (oldest first); agents (requester name) are an extra.
+  `Approval.title` = payload `title ?? summary ?? recommendedAction ?? type`; `summaryFields` =
+  the simple top-level payload fields. Decisions follow the server: Approve / Reject on `pending`
+  or `revision_requested`, Ask for changes on `pending` only; each sends its optional note as
+  `decisionNote` (`POST /approvals/:id/{approve,reject,request-revision}`). Never log a note.
 
 ## Tests
 
