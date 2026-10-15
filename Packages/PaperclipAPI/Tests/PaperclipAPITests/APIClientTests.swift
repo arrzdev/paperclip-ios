@@ -793,4 +793,147 @@ struct APIClientTests {
         #expect(projects.last?.status == "some_new_status")
         #expect(projects.allSatisfy { $0.archivedAt == nil })
     }
+
+    // MARK: Me → More (agents, run log, activity, goals, costs)
+
+    @Test func agentDetailDecodesPauseFieldsAndStatus() async throws {
+        try stub("agent-paused")
+        let agent = try await client.agent(id: "00000000-0000-4000-8000-000000000007")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/agents/00000000-0000-4000-8000-000000000007")
+        #expect(agent.name == "Fixture Agent")
+        #expect(agent.agentStatus == .paused)
+        #expect(agent.pauseReason == "manual")
+        #expect(agent.pausedAt == PaperclipDate.parse("2026-10-14T09:00:00.000Z"))
+        #expect(agent.lastHeartbeatAt == PaperclipDate.parse("2026-10-13T22:30:00.000Z"))
+        #expect(agent.urlKey == "fixture-agent")
+    }
+
+    @Test func agentStatusIsLenient() throws {
+        let raw = ["active", "idle", "running", "paused", "error", "pending_approval", "terminated", "hibernating"]
+        let statuses = raw.map(AgentStatus.init(rawValue:))
+        #expect(statuses == [.active, .idle, .running, .paused, .error, .pendingApproval, .terminated, .unknown("hibernating")])
+        #expect(statuses.map(\.rawValue) == raw)
+        let json = #"{"id":"a1","name":"New","role":null,"title":null,"status":null}"#
+        let agent = try PaperclipDate.decoder.decode(Agent.self, from: Data(json.utf8))
+        #expect(agent.agentStatus == .unknown(""))
+        #expect(agent.pausedAt == nil)
+        #expect(agent.urlKey == nil)
+    }
+
+    @Test func pauseAndResumePostAndReturnTheAgent() async throws {
+        try stub("agent-paused")
+        let paused = try await client.pauseAgent(id: "agent-1")
+        var request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/agents/agent-1/pause")
+        #expect(paused.agentStatus == .paused)
+
+        try stub("agent")
+        let resumed = try await client.resumeAgent(id: "agent-1")
+        request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/agents/agent-1/resume")
+        #expect(resumed.agentStatus == .idle)
+    }
+
+    @Test func aResumeTheServerRefusesIsAServerError() async throws {
+        StubURLProtocol.respond { _ in
+            .init(status: 409, body: Data(#"{"error":"Repair this agent's reporting chain before resuming it"}"#.utf8))
+        }
+        await #expect(throws: APIError.server(status: 409, body: "Repair this agent's reporting chain before resuming it")) {
+            _ = try await client.resumeAgent(id: "agent-1")
+        }
+    }
+
+    @Test func companyLiveRunsCarryTheirTask() async throws {
+        try stub("company-live-runs")
+        let runs = try await client.companyLiveRuns(companyId: "company-1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/companies/company-1/live-runs")
+        #expect(runs.map(\.status) == ["running", "queued"])
+        #expect(runs.first?.issueId == "00000000-0000-4000-8000-000000000012")
+        #expect(runs.last?.issueId == nil)
+        #expect(runs.last?.startedAt == nil)
+        #expect(runs.last?.agentName == "Fixture CEO")
+    }
+
+    @Test func runLogReadsAPageFromAnOffset() async throws {
+        try stub("run-log")
+        let log = try await client.runLog(runId: "00000000-0000-4000-8000-000000000030", offset: 512, limitBytes: 65536)
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.url?.path == "/api/heartbeat-runs/00000000-0000-4000-8000-000000000030/log")
+        #expect(queryItems(request) == ["offset": "512", "limitBytes": "65536"])
+        #expect(log.runId == "00000000-0000-4000-8000-000000000030")
+        #expect(log.nextOffset == log.content.utf8.count)
+        #expect(log.content.hasPrefix(#"{"ts":"#))
+    }
+
+    @Test func runLogFromTheStartSendsNoOffset() async throws {
+        StubURLProtocol.respond { _ in .init(body: Data(#"{"runId":"r1","store":"local_file","logRef":"x","content":""}"#.utf8)) }
+        let log = try await client.runLog(runId: "r1")
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(queryItems(request).isEmpty)
+        #expect(log.content.isEmpty)
+        #expect(log.nextOffset == nil)
+    }
+
+    @Test func runLogLinesAreParsedAndACutLineIsKept() throws {
+        let data = try fixture("run-log")
+        let log = try PaperclipDate.decoder.decode(RunLog.self, from: data)
+        let parsed = RunLog.parse(log.content)
+        #expect(parsed.lines.map(\.text) == ["[paperclip] Adapter execution timeout: none", "Reading the task", "tool: bash"])
+        #expect(parsed.lines.map(\.stream) == ["stderr", "stdout", "system"])
+        #expect(parsed.lines.map(\.seq) == [1, 2, 3])
+        #expect(parsed.lines.first?.ts == PaperclipDate.parse("2026-10-13T22:28:25.100Z"))
+        #expect(parsed.remainder == #"{"ts":"2026-10-13T22:28:28.400Z","stream":"stdout","chu"#)
+    }
+
+    @Test func aRunLogLineThatIsNotJSONIsKeptAsText() {
+        let parsed = RunLog.parse("plain output\n" + #"{"ts":"bad","stream":"stdout","chunk":"ok\n","seq":"x"}"# + "\n")
+        #expect(parsed.lines.map(\.text) == ["plain output", "ok"])
+        #expect(parsed.lines.first?.stream == "stdout")
+        #expect(parsed.lines.first?.seq == nil)
+        #expect(parsed.lines.last?.ts == nil)
+        #expect(parsed.remainder.isEmpty)
+    }
+
+    @Test func activityDecodesActorsEntitiesAndFreeFormDetails() async throws {
+        try stub("activity")
+        let events = try await client.activity(companyId: "company-1", limit: 50)
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.url?.path == "/api/companies/company-1/activity")
+        #expect(queryItems(request) == ["limit": "50"])
+        #expect(events.count == 3)
+        let first = try #require(events.first)
+        #expect(first.action == "issue.comment_added")
+        #expect(first.actorType == "agent")
+        #expect(first.agentId == "00000000-0000-4000-8000-000000000007")
+        #expect(first.entityType == "issue")
+        #expect(first.entityId == "00000000-0000-4000-8000-000000000012")
+        #expect(first.details?["identifier"] == .string("PAP-12"))
+        #expect(first.details?["issueTitle"] == .string("Fix the login"))
+        #expect(first.createdAt == PaperclipDate.parse("2026-10-13T22:30:00.000Z"))
+        #expect(events.dropFirst().first?.details == nil || events.dropFirst().first?.details == .null)
+        #expect(events.last?.actorType == "system")
+    }
+
+    @Test func goalsDecodeLevelsAndUnknownValuesAsText() async throws {
+        try stub("goals")
+        let goals = try await client.goals(companyId: "company-1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/companies/company-1/goals")
+        #expect(goals.map(\.title) == ["Ship the app", "Beta on staging", "Old idea"])
+        #expect(goals.map(\.parentId) == [nil, "goal-1", nil])
+        #expect(goals.map(\.level) == ["company", "team", "moonshot"])
+        #expect(goals.map(\.status) == ["active", "planned", "dreaming"])
+        #expect(goals.first?.ownerAgentId == "00000000-0000-4000-8000-000000000008")
+        #expect(goals.first?.description == "The whole thing.")
+    }
+
+    @Test func costSummaryForTheCompany() async throws {
+        try stub("costs-summary")
+        let summary = try await client.costSummary(companyId: "company-1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/companies/company-1/costs/summary")
+        #expect(summary.spendCents == 1234)
+        #expect(summary.budgetCents == 5000)
+        #expect(summary.utilizationPercent == 24.68)
+    }
 }
