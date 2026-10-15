@@ -142,7 +142,11 @@ final class ScreenTourUITests: XCTestCase {
     // MARK: - Evidence
 
     private func keepScreenshot(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        keep(app.screenshot(), name: name)
+    }
+
+    private func keep(_ screenshot: XCUIScreenshot, name: String) {
+        let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -159,10 +163,12 @@ final class ScreenTourUITests: XCTestCase {
         var result = auditOnce(app, known: known)
         var notes: [String] = []
         let retryReason: String?
+        let after = app.screenshot()
         if result.error != nil {
             retryReason = "the audit timed out or failed"
-        } else if app.screenshot().pngRepresentation != before {
+        } else if after.pngRepresentation != before {
             retryReason = "the screen moved during the audit"
+            keep(after, name: "\(screen) moved during audit")
         } else {
             retryReason = nil
         }
@@ -179,6 +185,9 @@ final class ScreenTourUITests: XCTestCase {
         }
         if let error = result.error {
             XCTFail("Accessibility audit could not run on \(screen): \(error)")
+        }
+        if !result.newIssues.isEmpty {
+            keep(app.screenshot(), name: "\(screen) after audit with NEW issues")
         }
         for issue in result.newIssues {
             XCTFail("\(screen): NEW audit issue \(issue)")
@@ -207,7 +216,8 @@ final class ScreenTourUITests: XCTestCase {
         do {
             try app.performAccessibilityAudit { issue in
                 let kind = issue.compactDescription
-                let label = issue.element.map { "'\($0.label)'" } ?? "no element"
+                // Without an element, the description is the only clue to where the text is.
+                let label = issue.element.map { "'\($0.label)'" } ?? "no element (\(issue.detailedDescription))"
                 if Self.backgroundKinds.contains(kind),
                    let element = issue.element, !barLabels.contains(element.label),
                    Self.isCovered(element.frame, screen: screenFrame, by: covers, keeping: messageBar) {
