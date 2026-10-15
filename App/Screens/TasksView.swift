@@ -17,6 +17,13 @@ struct TasksView: View {
 
     var body: some View {
         List {
+            // In the list, not pinned above it: a top bar over a list leaves
+            // the large title blurred under the scroll-edge effect (iOS 26).
+            Section {
+                filterBar
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+            }
             if case .loaded(let sections) = model.state {
                 ForEach(sections) { section in
                     Section {
@@ -40,7 +47,6 @@ struct TasksView: View {
         .animation(.default, value: model.state)
         .overlay { overlay }
         .newTaskButton(onNewTask)
-        .safeAreaInset(edge: .top, spacing: 0) { filterBar }
         .searchable(text: $model.searchText, prompt: "Search tasks")
         .task(id: model.searchText) { await model.search() }
         .refreshable { await model.refresh() }
@@ -70,7 +76,6 @@ struct TasksView: View {
         .pickerStyle(.menu)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(.bar)
     }
 
     @ViewBuilder

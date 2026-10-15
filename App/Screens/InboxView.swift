@@ -16,6 +16,15 @@ struct InboxView: View {
 
     var body: some View {
         List {
+            // In the list, not pinned above it: a top bar over a list leaves
+            // the large title blurred under the scroll-edge effect (iOS 26).
+            Picker("Segment", selection: $model.segment) {
+                ForEach(InboxSegment.allCases, id: \.self) { segment in
+                    Text("\(segment.title) \(model.count(segment))").tag(segment)
+                }
+            }
+            .pickerStyle(.segmented)
+            .listRowSeparator(.hidden)
             if case .loaded(let rows) = model.state {
                 ForEach(rows) { row in
                     NavigationLink(value: row.route) {
@@ -48,17 +57,6 @@ struct InboxView: View {
         .animation(.default, value: model.state)
         .overlay { overlay }
         .newTaskButton(onNewTask)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Picker("Segment", selection: $model.segment) {
-                ForEach(InboxSegment.allCases, id: \.self) { segment in
-                    Text("\(segment.title) \(model.count(segment))").tag(segment)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(.bar)
-        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
                 if let message = model.actionError {

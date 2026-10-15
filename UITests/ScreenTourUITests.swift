@@ -84,9 +84,16 @@ final class ScreenTourUITests: XCTestCase {
     private func openTab(_ title: String, in app: XCUIApplication) {
         let button = app.tabBars.buttons[title]
         XCTAssertTrue(button.waitForExistence(timeout: 10), "No \(title) tab")
-        button.tap()
-        // Audit the new tab, not the last frames of the old one.
-        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10), "\(title) did not open")
+        // Audit the new tab, not the last frames of the old one. A tap can be
+        // lost while the old tab is still busy (the screen stays as it was, so
+        // a longer wait does not help): tap again until the tab's bar shows.
+        let bar = app.navigationBars[title]
+        var taps = 0
+        repeat {
+            button.tap()
+            taps += 1
+        } while !bar.waitForExistence(timeout: 10) && taps < 3
+        XCTAssertTrue(bar.exists, "\(title) did not open after \(taps) taps")
     }
 
     /// Taps the row labelled `title` (scrolling down, then back up, to it) and waits for its screen.
@@ -112,14 +119,23 @@ final class ScreenTourUITests: XCTestCase {
         if back.exists { back.tap() }
     }
 
-    /// Waits until no spinner shows (at most 10 s), then a short settle for animations.
+    /// Waits until no spinner shows (at most 10 s), then until two screenshots
+    /// in a row are the same (at most 5 s): the audit must not judge a row or
+    /// a title still fading in.
     private func waitUntilLoaded(_ app: XCUIApplication) {
         let spinners = app.activityIndicators
         let deadline = Date().addingTimeInterval(10)
         while spinners.count > 0, Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
-        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        var last = app.screenshot().pngRepresentation
+        let stillDeadline = Date().addingTimeInterval(5)
+        while Date() < stillDeadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            let next = app.screenshot().pngRepresentation
+            if next == last { break }
+            last = next
+        }
     }
 
     // MARK: - Evidence
