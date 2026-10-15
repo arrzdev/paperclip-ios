@@ -1,0 +1,97 @@
+{
+  "ax5 Inbox": {
+    "Text clipped": 1
+  },
+  "ax5 Me-Accounts": {
+    "Contrast failed": 2,
+    "Dynamic Type font sizes are partially unsupported": 2,
+    "Label not human-readable": 1,
+    "Text clipped": 2
+  },
+  "ax5 Me-More-Activity": {
+    "Contrast failed": 2,
+    "Dynamic Type font sizes are partially unsupported": 1
+  },
+  "ax5 Me-More-Agents": {
+    "Contrast failed": 2,
+    "Text clipped": 1
+  },
+  "ax5 Me-More-Approvals": {
+    "Contrast failed": 2
+  },
+  "ax5 Me-More-Costs": {
+    "Contrast failed": 1
+  },
+  "ax5 Tasks": {
+    "Contrast failed": 2,
+    "Dynamic Type font sizes are partially unsupported": 2,
+    "Text clipped": 1
+  },
+  "ax5 Today": {
+    "Contrast failed": 4,
+    "Dynamic Type font sizes are partially unsupported": 1
+  },
+  "dark Inbox": {
+    "Contrast nearly passed": 1,
+    "Text clipped": 1
+  },
+  "dark Me-Accounts": {
+    "Contrast failed": 2,
+    "Dynamic Type font sizes are partially unsupported": 4,
+    "Label not human-readable": 1,
+    "Text clipped": 7
+  },
+  "dark Me-More-Agents": {
+    "Text clipped": 2
+  },
+  "dark Me-More-Costs": {
+    "Dynamic Type font sizes are partially unsupported": 2
+  },
+  "dark Tasks": {
+    "Contrast failed": 1,
+    "Potentially inaccessible text": 2,
+    "Text clipped": 1
+  },
+  "dark Today": {
+    "Contrast failed": 6,
+    "Contrast nearly passed": 2,
+    "Dynamic Type font sizes are partially unsupported": 1
+  },
+  "default Inbox": {
+    "Contrast nearly passed": 3,
+    "Dynamic Type font sizes are partially unsupported": 2,
+    "Text clipped": 1
+  },
+  "default Me-Accounts": {
+    "Contrast failed": 12,
+    "Dynamic Type font sizes are partially unsupported": 5,
+    "Label not human-readable": 1,
+    "Text clipped": 5
+  },
+  "default Me-More-Activity": {
+    "Contrast nearly passed": 3,
+    "Dynamic Type font sizes are partially unsupported": 1
+  },
+  "default Me-More-Agents": {
+    "Contrast nearly passed": 6,
+    "Dynamic Type font sizes are partially unsupported": 4,
+    "Text clipped": 2
+  },
+  "default Me-More-Approvals": {
+    "Contrast nearly passed": 6
+  },
+  "default Me-More-Goals": {
+    "Contrast nearly passed": 3
+  },
+  "default Tasks": {
+    "Contrast failed": 1,
+    "Contrast nearly passed": 2,
+    "Potentially inaccessible text": 2,
+    "Text clipped": 1
+  },
+  "default Today": {
+    "Contrast failed": 6,
+    "Contrast nearly passed": 9,
+    "Dynamic Type font sizes are partially unsupported": 1
+  }
+}
