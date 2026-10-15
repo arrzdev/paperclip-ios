@@ -29,12 +29,12 @@ struct NewTaskSheet: View {
                     if let notice {
                         Text(notice)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                     if let loadError = model.loadError {
                         Label(loadError, systemImage: "exclamationmark.triangle")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                     if model.phase != .idle {
                         SendBubble(phase: model.phase) {
@@ -191,7 +191,7 @@ struct MessageBar: View {
             if let notice {
                 Text(notice)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             if let image = model.image {
                 PendingThumbnail(image: image, canRemove: !model.isBusy) {

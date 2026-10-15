@@ -69,7 +69,7 @@ struct RequestRow: View {
             } trailing: {
                 Text(card.createdAt, format: .relative(presentation: .named))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             if let prompt = card.prompt {
                 Text(prompt)
@@ -79,7 +79,7 @@ struct RequestRow: View {
             if case .answer(let questions) = card.action {
                 Text(questions.count == 1 ? "1 question" : "\(questions.count) questions")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             if let details = card.details {
                 DisclosureGroup("Details") {
@@ -274,7 +274,7 @@ private struct OptionLabel: View {
             if let description = option.description, !description.isEmpty {
                 Text(description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
     }

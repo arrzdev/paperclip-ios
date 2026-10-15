@@ -24,6 +24,7 @@ struct PaperclipApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .tint(Color.accent)
                 .environment(store)
                 .preferredColorScheme(Self.colorScheme)
         }
