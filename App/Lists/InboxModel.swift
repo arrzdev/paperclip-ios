@@ -75,7 +75,8 @@ final class InboxModel {
         store: AccountStore,
         accountID: UUID,
         poller: Poller = .live,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        debounce: SearchDebounce = .live
     ) {
         self.store = store
         self.accountID = accountID
@@ -134,6 +135,8 @@ final class InboxModel {
             store.log("Inbox poll failed for account \(accountID): \(userMessage(for: error))")
         }
     }
+
+    func search() async {}
 
     /// Polls every `Poller.interval` until the calling task is cancelled.
     func runPolling() async {
