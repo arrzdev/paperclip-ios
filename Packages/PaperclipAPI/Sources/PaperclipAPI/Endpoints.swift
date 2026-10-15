@@ -69,6 +69,11 @@ public extension APIClient {
         try await send(.get, "/issues/\(segment(id))")
     }
 
+    /// 201 for a new task, 200 when `idempotencyKey` replays an earlier create.
+    func createIssue(companyId: String, _ issue: NewIssue) async throws -> Issue {
+        try await send(.post, "/companies/\(segment(companyId))/issues", body: issue)
+    }
+
     func updateIssue(id: String, _ update: IssueUpdate) async throws -> Issue {
         try await send(.patch, "/issues/\(segment(id))", body: update)
     }
@@ -143,6 +148,12 @@ public extension APIClient {
 
     func agents(companyId: String) async throws -> [Agent] {
         try await send(.get, "/companies/\(segment(companyId))/agents")
+    }
+
+    // MARK: Projects
+
+    func projects(companyId: String) async throws -> [Project] {
+        try await send(.get, "/companies/\(segment(companyId))/projects")
     }
 
     // MARK: Read / archive

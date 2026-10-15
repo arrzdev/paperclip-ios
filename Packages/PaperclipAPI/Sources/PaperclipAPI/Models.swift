@@ -392,6 +392,59 @@ public struct LiveRun: Decodable, Equatable, Identifiable, Sendable {
     public let createdAt: Date?
 }
 
+/// A new task from the New task sheet (`POST /api/companies/:id/issues`).
+/// Nil fields are not sent. `idempotencyKey` makes a retry replay the first
+/// create instead of making a second task.
+public struct NewIssue: Encodable, Equatable, Sendable {
+    public var title: String
+    public var description: String?
+    public var status: IssueStatus
+    public var assigneeAgentId: String?
+    public var projectId: String?
+    public var idempotencyKey: String
+
+    public init(
+        title: String,
+        description: String?,
+        status: IssueStatus = .todo,
+        assigneeAgentId: String?,
+        projectId: String?,
+        idempotencyKey: String
+    ) {
+        self.title = title
+        self.description = description
+        self.status = status
+        self.assigneeAgentId = assigneeAgentId
+        self.projectId = projectId
+        self.idempotencyKey = idempotencyKey
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case title, description, status, assigneeAgentId, projectId, idempotencyKey
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encode(status.rawValue, forKey: .status)
+        try container.encodeIfPresent(assigneeAgentId, forKey: .assigneeAgentId)
+        try container.encodeIfPresent(projectId, forKey: .projectId)
+        try container.encode(idempotencyKey, forKey: .idempotencyKey)
+    }
+}
+
+// MARK: - Projects
+
+/// A project of a company (`GET /api/companies/:id/projects`), for the project
+/// chip. The server leaves archived projects out unless asked.
+public struct Project: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public let status: String?
+    public let archivedAt: Date?
+}
+
 // MARK: - Agents
 
 /// An agent of a company (`GET /api/companies/:id/agents`), for the assignee picker.
