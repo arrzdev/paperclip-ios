@@ -4,8 +4,11 @@ import SwiftUI
 /// What needs me now: "Needs you" cards, "New replies" and the pulse line,
 /// refreshed by polling while on screen. Open and a reply row push Task detail;
 /// a card without a task opens the web UI. Replies swipe like the Inbox: right
-/// marks read, left archives. The bottom bar gives a new task to the default
-/// assignee; the floating + opens the New task sheet.
+/// marks read, left archives. The pulse is the list's first row, so it scrolls
+/// with the cards and never sits on top of one. The bottom bar gives a new task
+/// to the default assignee; the + beside it opens the New task sheet. Both sit
+/// in the bottom safe area, so the list ends above them and they never cover a
+/// card; from the accessibility text sizes up they grow no further than AX1.
 @MainActor
 struct TodayView: View {
     @State private var model: TodayModel
@@ -23,6 +26,20 @@ struct TodayView: View {
 
     var body: some View {
         List {
+            if let pulse = model.pulse {
+                Section {
+                    Text(pulse.text)
+                        .font(.footnote)
+                        .foregroundStyle(Color.secondaryText)
+                        .monospacedDigit()
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                        .accessibilityIdentifier("today.pulse")
+                }
+                .transition(.opacity)
+            }
             if case .loaded(let content) = model.state {
                 if !content.needsYou.isEmpty {
                     Section {
@@ -68,10 +85,10 @@ struct TodayView: View {
         }
         .listStyle(.insetGrouped)
         .animation(.default, value: model.state)
+        .animation(.default, value: model.pulse)
         .requestSheet($requestSheet, actions: model.requests)
         .sendsPendingRequests(model.requests)
         .overlay { overlay }
-        .newTaskButton(onNewTask)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
                 if let message = model.actionError {
@@ -92,17 +109,20 @@ struct TodayView: View {
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                if let pulse = model.pulse {
-                    Text(pulse.text)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .transition(.opacity)
-                }
-                if let newTask {
-                    MessageBar(model: newTask)
+                if newTask != nil || onNewTask != nil {
+                    HStack(alignment: .bottom, spacing: 8) {
+                        if let newTask {
+                            MessageBar(model: newTask)
+                                .accessibilityElement(children: .contain)
+                                .accessibilityIdentifier("today.messageBar")
+                        } else {
+                            Spacer()
+                        }
+                        if let onNewTask {
+                            NewTaskFloatingButton(action: onNewTask)
+                        }
+                    }
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 }
             }
             .padding(.horizontal)
@@ -111,7 +131,6 @@ struct TodayView: View {
             .animation(.snappy, value: model.actionError)
             .animation(.snappy, value: model.requests.error)
             .animation(.snappy, value: model.requests.pending)
-            .animation(.default, value: model.pulse)
         }
         .task(id: model.undo) {
             guard let undo = model.undo else { return }
@@ -169,8 +188,8 @@ private struct SectionHeader: View {
             Text(title)
             Text("\(count)")
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
         }
+        .foregroundStyle(Color.secondaryText)
         .accessibilityElement(children: .combine)
     }
 }
@@ -192,7 +211,7 @@ private struct NeedsYouCardView: View {
                 if let identifier = card.identifier {
                     Text(identifier)
                         .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
             }
             Text(card.title)
@@ -201,7 +220,7 @@ private struct NeedsYouCardView: View {
             if let detail = card.detail, !detail.isEmpty {
                 Text(detail)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(3)
             }
             ButtonRow {
@@ -236,11 +255,11 @@ private struct ReplyRowView: View {
             AdaptiveRow {
                 Text(row.issue.identifier ?? "")
                     .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             } trailing: {
                 Text(row.issue.lastExternalCommentAt ?? row.issue.updatedAt, format: .relative(presentation: .named))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             Text(row.issue.title)
                 .font(.body.weight(.semibold))
@@ -248,7 +267,7 @@ private struct ReplyRowView: View {
             if let preview = row.preview {
                 Text(preview)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(1)
             }
         }

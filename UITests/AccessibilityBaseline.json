@@ -1,0 +1,81 @@
+{
+  "ax5 Inbox": [
+    "Text clipped"
+  ],
+  "ax5 Me-Accounts": [
+    "Contrast failed",
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "ax5 Me-More-Activity": [
+    "Contrast failed",
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "ax5 Me-More-Agents": [
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "ax5 Me-More-Approvals": [
+    "Contrast failed"
+  ],
+  "ax5 Me-More-Costs": [
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "ax5 Tasks": [
+    "Contrast failed",
+    "Dynamic Type font sizes are partially unsupported",
+    "Text clipped"
+  ],
+  "ax5 Today": [
+    "Contrast failed",
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "dark Inbox": [
+    "Contrast nearly passed",
+    "Text clipped"
+  ],
+  "dark Me-Accounts": [
+    "Contrast failed",
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "dark Me-More-Activity": [
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "dark Me-More-Agents": [
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "dark Me-More-Costs": [
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "dark Tasks": [
+    "Contrast nearly passed",
+    "Text clipped"
+  ],
+  "dark Today": [
+    "Contrast failed",
+    "Contrast nearly passed",
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "default Inbox": [
+    "Dynamic Type font sizes are partially unsupported",
+    "Text clipped"
+  ],
+  "default Me-Accounts": [
+    "Contrast failed",
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "default Me-More-Activity": [
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "default Me-More-Agents": [
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "default Me-More-Costs": [
+    "Dynamic Type font sizes are partially unsupported"
+  ],
+  "default Tasks": [
+    "Text clipped"
+  ],
+  "default Today": [
+    "Contrast failed",
+    "Dynamic Type font sizes are partially unsupported"
+  ]
+}

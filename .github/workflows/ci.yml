@@ -45,7 +45,48 @@ jobs:
       - name: Build and test app (simulator)
         run: |
           xcodebuild test -project PaperclipIOS.xcodeproj -scheme PaperclipIOS \
-            -destination "id=$DEST" CODE_SIGNING_ALLOWED=NO
+            -destination "id=$DEST" -skip-testing:PaperclipIOSUITests CODE_SIGNING_ALLOWED=NO
+
+  ui-test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Pick simulator
+        run: |
+          DEST=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']))")
+          echo "DEST=$DEST" >> "$GITHUB_ENV"
+      - name: UI tests on fixture data (screenshots and accessibility audit)
+        run: |
+          xcodebuild test -project PaperclipIOS.xcodeproj -scheme PaperclipIOS \
+            -destination "id=$DEST" -only-testing:PaperclipIOSUITests \
+            -resultBundlePath UITestResults.xcresult CODE_SIGNING_ALLOWED=NO
+      - name: Export screenshots and audit results
+        if: always()
+        run: |
+          [ -d UITestResults.xcresult ] || exit 0
+          mkdir -p ui-evidence
+          xcrun xcresulttool export attachments --path UITestResults.xcresult --output-path ui-evidence/raw
+          xcrun xcresulttool get test-results summary --path UITestResults.xcresult > ui-evidence/summary.json || true
+          xcrun xcresulttool get test-results tests --path UITestResults.xcresult > ui-evidence/tests.json || true
+          python3 .github/scripts/name-attachments.py ui-evidence/raw ui-evidence/attachments
+          ls -R ui-evidence/attachments
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: Paperclip-ui-screenshots
+          path: ui-evidence
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: Paperclip-ui-xcresult
+          path: UITestResults.xcresult
+          if-no-files-found: warn
 
   ipa:
     needs: [no-hardcoded-server, build-test]
@@ -62,6 +103,8 @@ jobs:
           xcodebuild build -project PaperclipIOS.xcodeproj -scheme PaperclipIOS \
             -configuration Release -sdk iphoneos -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+      - name: Release app carries no UI-test fixtures
+        run: test ! -e build/Build/Products/Release-iphoneos/PaperclipIOS.app/Fixtures
       - name: Package unsigned .ipa
         run: |
           mkdir Payload
@@ -97,13 +140,14 @@ jobs:
 
   gate:
     if: always()
-    needs: [no-hardcoded-server, build-test, ipa, release]
+    needs: [no-hardcoded-server, build-test, ui-test, ipa, release]
     runs-on: ubuntu-latest
     steps:
       - name: Require upstream jobs green
         run: |
           [ "${{ needs.no-hardcoded-server.result }}" = success ] || exit 1
           [ "${{ needs.build-test.result }}" = success ] || exit 1
+          [ "${{ needs.ui-test.result }}" = success ] || exit 1
           for r in "${{ needs.ipa.result }}" "${{ needs.release.result }}"; do
             [ "$r" = success ] || [ "$r" = skipped ] || exit 1
           done

@@ -19,12 +19,14 @@ struct TasksView: View {
         List {
             if case .loaded(let sections) = model.state {
                 ForEach(sections) { section in
-                    Section(section.title) {
+                    Section {
                         ForEach(section.issues, id: \.id) { issue in
                             NavigationLink(value: TaskRoute(issueID: issue.id)) {
                                 TaskRowView(issue: issue)
                             }
                         }
+                    } header: {
+                        SectionTitle(section.title)
                     }
                 }
                 if model.hasMore {
@@ -102,7 +104,7 @@ struct TasksView: View {
             if let message = model.pageError {
                 Text(message)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
     }
@@ -151,11 +153,11 @@ private struct TaskRowView: View {
             AdaptiveRow {
                 Text(issue.identifier ?? "")
                     .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             } trailing: {
                 Text(issue.status.label)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             Text(issue.title)
                 .lineLimit(2)
