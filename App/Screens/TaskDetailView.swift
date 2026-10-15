@@ -4,13 +4,15 @@ import SwiftUI
 import UIKit
 
 /// One task: title, pickers for status, assignee and priority, description and
-/// documents, attachments, the thread oldest first and the review bar.
-/// Refreshed by polling while on screen.
+/// documents, attachments, the thread oldest first, the review bar and the
+/// composer. Refreshed by polling while on screen.
 @MainActor
 struct TaskDetailView: View {
     @State private var model: TaskDetailModel
     @State private var showsReopen = false
     @State private var previewURL: URL?
+    /// Built once the task is loaded (the upload needs its company).
+    @State private var composer: CommentComposer?
 
     init(store: AccountStore, accountID: UUID, issueID: String) {
         _model = State(initialValue: TaskDetailModel(store: store, accountID: accountID, issueID: issueID))
@@ -51,6 +53,23 @@ struct TaskDetailView: View {
             ReopenSheet(model: model)
         }
         .quickLookPreview($previewURL)
+        .onChange(of: model.detail?.issue.id, initial: true) { _, _ in
+            makeComposer()
+        }
+    }
+
+    private func makeComposer() {
+        guard composer == nil, let issue = model.detail?.issue else { return }
+        let model = model
+        composer = CommentComposer(
+            store: model.store, accountID: model.accountID, companyID: issue.companyId, issueID: issue.id,
+            drafts: FileDraftStore.live(),
+            onSent: { comment in
+                model.insertComment(comment)
+                // A sent photo shows under its comment.
+                Task { await model.reloadAttachments() }
+            }
+        )
     }
 
     // MARK: Sections
@@ -145,7 +164,7 @@ struct TaskDetailView: View {
         }
     }
 
-    /// The action error, the review bar and (next) the composer.
+    /// The action error, the review bar and the composer.
     private var bottomBar: some View {
         VStack(spacing: 8) {
             if let message = model.actionError, !showsReopen {
@@ -174,12 +193,14 @@ struct TaskDetailView: View {
                 .controlSize(.large)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            // The comment composer goes here.
+            if let composer {
+                ComposerBar(composer: composer)
+            }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
         .background {
-            if model.showsReviewBar {
+            if model.showsReviewBar || composer != nil {
                 Rectangle().fill(.bar).ignoresSafeArea()
             }
         }

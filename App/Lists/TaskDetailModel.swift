@@ -208,6 +208,13 @@ final class TaskDetailModel {
         }
     }
 
+    /// Refetches the attachments, so a photo just sent shows under its comment.
+    func reloadAttachments() async {
+        if let attachments = await extra({ try await $0.attachments(issueId: issueID) }) {
+            update { $0.attachments = attachments }
+        }
+    }
+
     func dismissActionError() {
         actionError = nil
     }
