@@ -174,7 +174,6 @@ struct ActionErrorBanner: View {
                 .accessibilityHidden(true)
             Text(message)
                 .font(.footnote)
-                .lineLimit(2)
             Spacer(minLength: 0)
             Button {
                 onDismiss()
@@ -192,20 +191,21 @@ struct ActionErrorBanner: View {
 
 private struct InboxRowView: View {
     let row: InboxRow
+    @ScaledMetric(relativeTo: .caption) private var dotSize: CGFloat = 8
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Circle()
                 .fill(.tint)
-                .frame(width: 8, height: 8)
+                .frame(width: dotSize, height: dotSize)
                 .opacity(row.isUnread ? 1 : 0)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline) {
+                AdaptiveRow {
                     Text(row.issue.identifier ?? "")
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
-                    Spacer()
+                } trailing: {
                     Text(row.issue.lastActivityAt ?? row.issue.updatedAt, format: .relative(presentation: .named))
                         .font(.caption)
                         .foregroundStyle(.secondary)
