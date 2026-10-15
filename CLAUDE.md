@@ -224,7 +224,8 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   A screen that calls a new endpoint needs a route there. `ScreenTourUITests` walks Today, Inbox,
   Tasks, Me → Accounts and Me → More at default size, AX5 and dark, keeps a screenshot of each
   screen and runs `performAccessibilityAudit()` (an audit that timed out, or ran while the screen
-  moved, runs once more and only that run counts). `UITests/AccessibilityBaseline.json` holds the
+  moved, runs once more and only that run counts; after a timeout that run checks one audit type
+  at a time). `UITests/AccessibilityBaseline.json` holds the
   issue kinds already known per screen (kinds, not counts: findings vary between runs); a new kind
   on a screen fails. The Dynamic Type kind, known for a screen in one variant, counts in all three
   (the audit reports it unevenly). Contrast issues of elements under the tab, navigation or Today

@@ -156,7 +156,9 @@ final class ScreenTourUITests: XCTestCase {
     /// and a NEW one fails. The audit is run once more when it timed out or
     /// when the screen moved while it ran (a screenshot before and after
     /// differ: a list still bouncing gets judged mid-frame); then only the
-    /// second run counts, and its NEW issues fail as usual.
+    /// second run counts, and its NEW issues fail as usual. After a timeout
+    /// the second run checks the same audit types one at a time
+    /// (`auditTypeParts`): shorter audits, the same rules.
     private func audit(_ app: XCUIApplication, screen: String) {
         let known = Self.knownKinds(for: screen)
         let before = app.screenshot().pngRepresentation
@@ -181,7 +183,7 @@ final class ScreenTourUITests: XCTestCase {
             notes.append("Counted, second run:")
             waitUntilLoaded(app)
             RunLoop.current.run(until: Date().addingTimeInterval(1))
-            result = auditOnce(app, known: known)
+            result = result.error == nil ? auditOnce(app, known: known) : auditInParts(app, known: known)
         }
         if let error = result.error {
             XCTFail("Accessibility audit could not run on \(screen): \(error)")
@@ -205,16 +207,49 @@ final class ScreenTourUITests: XCTestCase {
         var error: Error?
     }
 
+    /// Every audit type, one per part, plus whatever else `.all` holds.
+    static var auditTypeParts: [XCUIAccessibilityAuditType] {
+        var parts: [XCUIAccessibilityAuditType] = [
+            .contrast, .elementDetection, .hitRegion, .sufficientElementDescription,
+            .dynamicType, .textClipped, .trait,
+        ]
+        var rest = XCUIAccessibilityAuditType.all
+        for part in parts {
+            rest.subtract(part)
+        }
+        if !rest.isEmpty { parts.append(rest) }
+        return parts
+    }
+
+    /// The whole audit as one shorter audit per type; the first error stops it.
+    private func auditInParts(_ app: XCUIApplication, known: Set<String>) -> AuditResult {
+        var result = AuditResult()
+        for types in Self.auditTypeParts {
+            let part = auditOnce(app, known: known, types: types)
+            result.lines += part.lines
+            result.newIssues += part.newIssues
+            if let error = part.error {
+                result.error = error
+                break
+            }
+        }
+        return result
+    }
+
     /// One audit run. Every issue is only recorded here (the handler keeps
     /// it from failing the test): the caller decides which run counts.
-    private func auditOnce(_ app: XCUIApplication, known: Set<String>) -> AuditResult {
+    private func auditOnce(
+        _ app: XCUIApplication,
+        known: Set<String>,
+        types: XCUIAccessibilityAuditType = .all
+    ) -> AuditResult {
         var result = AuditResult()
         let covers = coveringFrames(app)
         let messageBar = messageBarFrame(app)
         let barLabels = barElementLabels(app)
         let screenFrame = app.windows.firstMatch.frame
         do {
-            try app.performAccessibilityAudit { issue in
+            try app.performAccessibilityAudit(for: types) { issue in
                 let kind = issue.compactDescription
                 // Without an element, the description is the only clue to where the text is.
                 let label = issue.element.map { "'\($0.label)'" } ?? "no element (\(issue.detailedDescription))"
