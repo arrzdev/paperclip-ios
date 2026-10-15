@@ -115,3 +115,21 @@ struct SectionTitle: View {
         }
     }
 }
+
+extension View {
+    /// A bar pinned above a list (filters, segments). On iOS 26 it is a
+    /// `safeAreaBar`: the list's scroll-edge effect sits under it, not over
+    /// the navigation bar. A top `safeAreaInset` there leaves the large title
+    /// blurred, and the accessibility audit reports it as text it cannot read.
+    @ViewBuilder
+    func topBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        let content = bar()
+        if #available(iOS 26, *) {
+            safeAreaBar(edge: .top, spacing: 0) { content }
+        } else {
+            safeAreaInset(edge: .top, spacing: 0) {
+                content.background(.bar)
+            }
+        }
+    }
+}

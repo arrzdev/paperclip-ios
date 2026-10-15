@@ -48,7 +48,7 @@ struct InboxView: View {
         .animation(.default, value: model.state)
         .overlay { overlay }
         .newTaskButton(onNewTask)
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .topBar {
             Picker("Segment", selection: $model.segment) {
                 ForEach(InboxSegment.allCases, id: \.self) { segment in
                     Text("\(segment.title) \(model.count(segment))").tag(segment)
@@ -57,7 +57,6 @@ struct InboxView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal)
             .padding(.vertical, 8)
-            .background(.bar)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {

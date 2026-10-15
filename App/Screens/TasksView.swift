@@ -40,7 +40,7 @@ struct TasksView: View {
         .animation(.default, value: model.state)
         .overlay { overlay }
         .newTaskButton(onNewTask)
-        .safeAreaInset(edge: .top, spacing: 0) { filterBar }
+        .topBar { filterBar }
         .searchable(text: $model.searchText, prompt: "Search tasks")
         .task(id: model.searchText) { await model.search() }
         .refreshable { await model.refresh() }
@@ -70,7 +70,6 @@ struct TasksView: View {
         .pickerStyle(.menu)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(.bar)
     }
 
     @ViewBuilder
