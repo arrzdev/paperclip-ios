@@ -150,6 +150,49 @@ public extension APIClient {
         try await send(.get, "/companies/\(segment(companyId))/agents")
     }
 
+    func agent(id: String) async throws -> Agent {
+        try await send(.get, "/agents/\(segment(id))")
+    }
+
+    /// Board only. The server also cancels the agent's active runs.
+    func pauseAgent(id: String) async throws -> Agent {
+        try await send(.post, "/agents/\(segment(id))/pause", body: EmptyBody())
+    }
+
+    /// A 409 means the server refuses (for example a broken reporting chain).
+    func resumeAgent(id: String) async throws -> Agent {
+        try await send(.post, "/agents/\(segment(id))/resume", body: EmptyBody())
+    }
+
+    /// Queued and running runs of the company, newest first.
+    func companyLiveRuns(companyId: String) async throws -> [LiveRun] {
+        try await send(.get, "/companies/\(segment(companyId))/live-runs")
+    }
+
+    /// `offset` is sent only when > 0, `limitBytes` only when set (server default 256 KB, max 1 MB).
+    func runLog(runId: String, offset: Int = 0, limitBytes: Int? = nil) async throws -> RunLog {
+        var query: [URLQueryItem] = []
+        if offset > 0 { query.append(URLQueryItem(name: "offset", value: String(offset))) }
+        if let limitBytes { query.append(URLQueryItem(name: "limitBytes", value: String(limitBytes))) }
+        return try await send(.get, "/heartbeat-runs/\(segment(runId))/log", query: query)
+    }
+
+    // MARK: Activity, goals, costs
+
+    /// Newest first. The server's default limit is 100, its maximum 500.
+    func activity(companyId: String, limit: Int? = nil) async throws -> [ActivityEvent] {
+        let query = limit.map { [URLQueryItem(name: "limit", value: String($0))] } ?? []
+        return try await send(.get, "/companies/\(segment(companyId))/activity", query: query)
+    }
+
+    func goals(companyId: String) async throws -> [Goal] {
+        try await send(.get, "/companies/\(segment(companyId))/goals")
+    }
+
+    func costSummary(companyId: String) async throws -> CostSummary {
+        try await send(.get, "/companies/\(segment(companyId))/costs/summary")
+    }
+
     // MARK: Projects
 
     func projects(companyId: String) async throws -> [Project] {
