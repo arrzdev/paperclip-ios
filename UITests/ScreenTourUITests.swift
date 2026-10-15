@@ -14,7 +14,8 @@ import XCTest
 /// partly under the tab bar, the navigation bar or Today's message bar (or
 /// off screen) is judged against the bar's glass, not its own background: its
 /// contrast issues are listed as "covered" and do not count. Its other issues
-/// (clipping, labels, Dynamic Type) count as usual.
+/// (clipping, labels, Dynamic Type) count as usual. An audit that timed out
+/// or ran while the screen moved runs once more and only that run counts.
 @MainActor
 final class ScreenTourUITests: XCTestCase {
     func testDefaultSize() {
@@ -147,44 +148,84 @@ final class ScreenTourUITests: XCTestCase {
         add(attachment)
     }
 
-    /// Runs the accessibility audit; every issue goes into a text attachment.
-    /// A timed-out audit is retried once.
+    /// Runs the accessibility audit; every issue goes into a text attachment
+    /// and a NEW one fails. The audit is run once more when it timed out or
+    /// when the screen moved while it ran (a screenshot before and after
+    /// differ: a list still bouncing gets judged mid-frame); then only the
+    /// second run counts, and its NEW issues fail as usual.
     private func audit(_ app: XCUIApplication, screen: String) {
         let known = Self.knownKinds(for: screen)
-        var lines: [String] = []
-        for attempt in 1...2 {
-            lines = []
-            do {
-                let covers = coveringFrames(app)
-                let messageBar = messageBarFrame(app)
-                let barLabels = barElementLabels(app)
-                let screenFrame = app.windows.firstMatch.frame
-                try app.performAccessibilityAudit { issue in
-                    let kind = issue.compactDescription
-                    let label = issue.element.map { "'\($0.label)'" } ?? "no element"
-                    if Self.backgroundKinds.contains(kind),
-                       let element = issue.element, !barLabels.contains(element.label),
-                       Self.isCovered(element.frame, screen: screenFrame, by: covers, keeping: messageBar) {
-                        lines.append("covered: \(kind) — \(label)")
-                        return true
-                    }
-                    let isKnown = known.contains(kind)
-                    lines.append("\(isKnown ? "known" : "NEW"): \(kind) — \(label)")
-                    return isKnown
-                }
-                break
-            } catch {
-                if attempt == 2 {
-                    XCTFail("Accessibility audit could not run on \(screen): \(error)")
-                } else {
-                    RunLoop.current.run(until: Date().addingTimeInterval(2))
-                }
-            }
+        let before = app.screenshot().pngRepresentation
+        var result = auditOnce(app, known: known)
+        var notes: [String] = []
+        let retryReason: String?
+        if result.error != nil {
+            retryReason = "the audit timed out or failed"
+        } else if app.screenshot().pngRepresentation != before {
+            retryReason = "the screen moved during the audit"
+        } else {
+            retryReason = nil
         }
-        let attachment = XCTAttachment(string: lines.isEmpty ? "No issues." : lines.joined(separator: "\n"))
+        if let retryReason {
+            notes.append("Retried: \(retryReason). Not counted, first run:")
+            notes += result.lines.isEmpty ? ["No issues."] : result.lines
+            if let error = result.error {
+                notes.append("error: \(error.localizedDescription)")
+            }
+            notes.append("Counted, second run:")
+            waitUntilLoaded(app)
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+            result = auditOnce(app, known: known)
+        }
+        if let error = result.error {
+            XCTFail("Accessibility audit could not run on \(screen): \(error)")
+        }
+        for issue in result.newIssues {
+            XCTFail("\(screen): NEW audit issue \(issue)")
+        }
+        let lines = notes + (result.lines.isEmpty ? ["No issues."] : result.lines)
+        let attachment = XCTAttachment(string: lines.joined(separator: "\n"))
         attachment.name = "\(screen) audit"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private struct AuditResult {
+        var lines: [String] = []
+        var newIssues: [String] = []
+        var error: Error?
+    }
+
+    /// One audit run. Every issue is only recorded here (the handler keeps
+    /// it from failing the test): the caller decides which run counts.
+    private func auditOnce(_ app: XCUIApplication, known: Set<String>) -> AuditResult {
+        var result = AuditResult()
+        let covers = coveringFrames(app)
+        let messageBar = messageBarFrame(app)
+        let barLabels = barElementLabels(app)
+        let screenFrame = app.windows.firstMatch.frame
+        do {
+            try app.performAccessibilityAudit { issue in
+                let kind = issue.compactDescription
+                let label = issue.element.map { "'\($0.label)'" } ?? "no element"
+                if Self.backgroundKinds.contains(kind),
+                   let element = issue.element, !barLabels.contains(element.label),
+                   Self.isCovered(element.frame, screen: screenFrame, by: covers, keeping: messageBar) {
+                    result.lines.append("covered: \(kind) — \(label)")
+                    return true
+                }
+                if known.contains(kind) {
+                    result.lines.append("known: \(kind) — \(label)")
+                } else {
+                    result.lines.append("NEW: \(kind) — \(label)")
+                    result.newIssues.append("\(kind) — \(label)")
+                }
+                return true
+            }
+        } catch {
+            result.error = error
+        }
+        return result
     }
 
     /// The audit's kinds that judge an element against its background (the
