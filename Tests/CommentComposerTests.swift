@@ -41,18 +41,22 @@ struct CommentComposerTests {
     @Test func draftIsKeptPerTaskAndSurvivesLeavingTheScreen() throws {
         let server = StubServer()
         let drafts = InMemoryDraftStore()
-        let (first, _, _) = try composer(server, drafts: drafts)
+        let (first, store, id) = try composer(server, drafts: drafts)
         first.text = "Half a reply"
         first.attach(Self.photo)
 
-        // Leaving and coming back builds a new composer for the same task.
-        let (again, _, _) = try composer(server, drafts: drafts)
+        // Leaving and coming back builds a new composer for the same account and task.
+        let again = CommentComposer(
+            store: store, accountID: id, companyID: "company-1", issueID: "issue-1", drafts: drafts, onSent: { _ in }
+        )
         #expect(again.text == "Half a reply")
         #expect(again.image?.data == Self.png)
         #expect(again.image?.filename == "screenshot.png")
 
         // Another task has its own (empty) draft.
-        let (other, _, _) = try composer(server, drafts: drafts, issueID: "issue-2")
+        let other = CommentComposer(
+            store: store, accountID: id, companyID: "company-1", issueID: "issue-2", drafts: drafts, onSent: { _ in }
+        )
         #expect(other.text == "")
         #expect(other.image == nil)
     }
