@@ -87,12 +87,12 @@ final class ScreenTourUITests: XCTestCase {
         button.tap()
     }
 
-    /// Taps the row labelled `title` (scrolling down to it) and waits for its screen.
+    /// Taps the row labelled `title` (scrolling down, then back up, to it) and waits for its screen.
     private func open(_ title: String, in app: XCUIApplication) -> Bool {
         let row = app.buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
         var swipes = 0
-        while !(row.exists && row.isHittable), swipes < 12 {
-            app.swipeUp()
+        while !(row.exists && row.isHittable), swipes < 24 {
+            if swipes < 12 { app.swipeUp() } else { app.swipeDown() }
             swipes += 1
         }
         guard row.exists, row.isHittable else {
@@ -138,11 +138,14 @@ final class ScreenTourUITests: XCTestCase {
             lines = []
             do {
                 let covers = coveringFrames(app)
+                let messageBar = messageBarFrame(app)
+                let barLabels = barElementLabels(app)
                 let screenFrame = app.windows.firstMatch.frame
                 try app.performAccessibilityAudit { issue in
                     let kind = issue.compactDescription
                     let label = issue.element.map { "'\($0.label)'" } ?? "no element"
-                    if let frame = issue.element?.frame, Self.isCovered(frame, screen: screenFrame, by: covers) {
+                    if let element = issue.element, !barLabels.contains(element.label),
+                       Self.isCovered(element.frame, screen: screenFrame, by: covers, keeping: messageBar) {
                         lines.append("covered: \(kind) — \(label)")
                         return true
                     }
@@ -165,27 +168,59 @@ final class ScreenTourUITests: XCTestCase {
         add(attachment)
     }
 
-    /// The bars content scrolls under: tab bar, navigation bar, and Today's
-    /// message bar (from just above its text field down).
+    /// How far the tab bar's scroll-edge blur reaches into the content
+    /// (less than the 16 pt gap above it of the floating +).
+    static let edgeEffect: CGFloat = 8
+
+    /// The bars content scrolls under: the tab bar with its edge blur, the
+    /// navigation bar, and Today's message bar.
     private func coveringFrames(_ app: XCUIApplication) -> [CGRect] {
         var frames: [CGRect] = []
-        for bar in [app.tabBars.firstMatch, app.navigationBars.firstMatch] where bar.exists {
-            frames.append(bar.frame)
+        let tabBar = app.tabBars.firstMatch
+        if tabBar.exists {
+            frames.append(tabBar.frame.insetBy(dx: 0, dy: -Self.edgeEffect))
         }
-        let message = app.textFields.matching(NSPredicate(format: "placeholderValue BEGINSWITH %@", "Message")).firstMatch
-        if message.exists {
-            let field = message.frame
-            let top = field.minY - 16
-            frames.append(CGRect(x: 0, y: top, width: app.windows.firstMatch.frame.width, height: field.maxY + 16 - top))
+        let navigationBar = app.navigationBars.firstMatch
+        if navigationBar.exists {
+            frames.append(navigationBar.frame)
+        }
+        if let messageBar = messageBarFrame(app) {
+            frames.append(messageBar)
         }
         return frames
     }
 
-    /// Off screen, or cut by a bar it is not part of (a bar's own buttons lie inside it).
-    static func isCovered(_ frame: CGRect, screen: CGRect, by covers: [CGRect]) -> Bool {
+    /// Today's message bar, from just above its text field down; nil elsewhere.
+    private func messageBarFrame(_ app: XCUIApplication) -> CGRect? {
+        let message = app.textFields.matching(NSPredicate(format: "placeholderValue BEGINSWITH %@", "Message")).firstMatch
+        guard message.exists else { return nil }
+        let field = message.frame
+        let top = field.minY - 16
+        return CGRect(x: 0, y: top, width: app.windows.firstMatch.frame.width, height: field.maxY + 16 - top)
+    }
+
+    /// Labels (and placeholders) of the navigation and tab bars' own
+    /// elements: title, buttons, search field, tabs. Those are judged, never
+    /// counted as covered.
+    private func barElementLabels(_ app: XCUIApplication) -> Set<String> {
+        var labels: Set<String> = []
+        for bar in [app.tabBars.firstMatch, app.navigationBars.firstMatch] where bar.exists {
+            for element in bar.descendants(matching: .any).allElementsBoundByIndex {
+                if !element.label.isEmpty { labels.insert(element.label) }
+                if let placeholder = element.placeholderValue, !placeholder.isEmpty { labels.insert(placeholder) }
+            }
+        }
+        return labels
+    }
+
+    /// Off screen, or under a bar (or its edge blur), even in part. The
+    /// navigation and tab bars' own elements are left out by the caller;
+    /// anything inside the message bar is its own and is judged.
+    static func isCovered(_ frame: CGRect, screen: CGRect, by covers: [CGRect], keeping messageBar: CGRect?) -> Bool {
         guard !frame.isEmpty else { return false }
+        if let messageBar, messageBar.contains(frame) { return false }
         if !screen.isEmpty, !screen.contains(frame) { return true }
-        return covers.contains { $0.intersects(frame) && !$0.contains(frame) }
+        return covers.contains { $0.intersects(frame) }
     }
 
     /// Known audit issue kinds per screen ("<variant> <screen>").

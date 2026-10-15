@@ -83,7 +83,7 @@ struct InboxView: View {
             try? await Task.sleep(for: .seconds(wait))
             model.clearExpiredUndo()
         }
-        .searchable(text: $model.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search the inbox")
+        .searchable(text: $model.searchText, prompt: "Search the inbox")
         .task(id: model.searchText) { await model.search() }
         .refreshable { await model.refresh() }
         .task {

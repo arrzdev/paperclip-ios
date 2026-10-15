@@ -41,7 +41,7 @@ struct TasksView: View {
         .overlay { overlay }
         .newTaskButton(onNewTask)
         .safeAreaInset(edge: .top, spacing: 0) { filterBar }
-        .searchable(text: $model.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search tasks")
+        .searchable(text: $model.searchText, prompt: "Search tasks")
         .task(id: model.searchText) { await model.search() }
         .refreshable { await model.refresh() }
         .task(id: Filters(status: model.status, assignee: model.assignee)) {
@@ -165,6 +165,7 @@ private struct FilterMenuLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(title)
+                .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
             Image(systemName: "chevron.up.chevron.down")
                 .font(.caption.weight(.semibold))

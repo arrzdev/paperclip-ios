@@ -46,7 +46,7 @@ struct MoreSection: View {
         } header: {
             SectionTitle("Open in web")
         } footer: {
-            SectionTitle("These open \(model.companyName ?? "the company") in the browser.")
+            SectionTitle("These open \(model.companyName ?? "the company") in the browser.", font: .footnote)
         }
     }
 }
@@ -173,8 +173,7 @@ private struct AgentRowView: View {
                         .foregroundStyle(Color.secondaryText)
                 }
                 if row.liveRun != nil {
-                    RowLabel("Working now", systemImage: "bolt.fill")
-                        .font(.footnote)
+                    RowLabel("Working now", systemImage: "bolt.fill", font: .footnote)
                         .foregroundStyle(.tint)
                 }
             }

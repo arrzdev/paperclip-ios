@@ -144,7 +144,7 @@ struct AccountSwitcherSheet: View {
                         ServerHeader(name: section.account.server.displayName)
                     } footer: {
                         if let user = section.account.userName ?? section.account.userEmail {
-                            SectionTitle(user)
+                            SectionTitle(user, font: .footnote)
                         }
                     }
                 }
@@ -192,6 +192,7 @@ struct CompanySwitcherButton: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Text(companyName ?? "Company")
+                    .font(.body)
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
