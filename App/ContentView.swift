@@ -29,8 +29,9 @@ struct ContentView: View {
             }
             .id(id)
         case .home(let id):
-            HomeView(accountID: id)
-                .id(id)
+            // Keyed by account and company: a switch reloads Today and goes back to its tab.
+            HomeView(store: store, accountID: id)
+                .id("\(id.uuidString)/\(store.currentAccount?.selectedCompanyId ?? "")")
         }
     }
 }

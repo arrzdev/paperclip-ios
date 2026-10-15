@@ -1,49 +1,53 @@
 import PaperclipAPI
 import SwiftUI
 
-/// Settings: the servers signed in to (switch, add, remove, sign in again)
-/// and the current account's company.
+/// Me → Accounts (also the Settings sheet): every server with its user and
+/// companies, a ✓ on the current company and its "Needs you" badge. Tap a
+/// company to switch; swipe a server to sign out or remove it.
 @MainActor
 struct AccountsView: View {
-    @Environment(AccountStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @State private var model: AccountsModel
     @State private var signInSheet: SignInSheet?
     @State private var errorMessage: String?
     private let title: String
     /// False in the Me tab, where there is no sheet to close.
     private let showsDoneButton: Bool
 
-    init(title: String = "Settings", showsDoneButton: Bool = true) {
+    init(model: AccountsModel, title: String = "Settings", showsDoneButton: Bool = true) {
+        _model = State(initialValue: model)
         self.title = title
         self.showsDoneButton = showsDoneButton
     }
 
     var body: some View {
         List {
-            Section("Servers") {
-                ForEach(store.accounts) { account in
+            ForEach(model.sections) { section in
+                Section {
                     AccountRow(
-                        account: account,
-                        isCurrent: account.id == store.currentAccountID,
-                        onSelect: { select(account.id) },
-                        onSignInAgain: { signInSheet = .reSignIn(account.id) }
+                        account: section.account,
+                        onSignInAgain: { signInSheet = .reSignIn(section.account.id) }
                     )
-                }
-                .onDelete(perform: remove)
-
-                Button("Add server", systemImage: "plus") {
-                    signInSheet = .add
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button("Remove", systemImage: "trash", role: .destructive) {
+                            remove(section.account.id)
+                        }
+                        if !section.account.needsSignIn {
+                            Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") {
+                                Task { await model.signOut(section.account.id) }
+                            }
+                            .tint(.orange)
+                        }
+                    }
+                    CompanyRows(model: model, section: section, onSwitch: switchTo)
+                } header: {
+                    Text(section.account.server.displayName)
                 }
             }
 
-            if let account = store.currentAccount, !account.needsSignIn {
-                Section("Current server") {
-                    NavigationLink("Company") {
-                        CompanyPickerView(store: store)
-                    }
-                    Button("Sign out", role: .destructive) {
-                        Task { await store.signOut(account.id) }
-                    }
+            Section {
+                Button("Add server", systemImage: "plus") {
+                    signInSheet = .add
                 }
             }
 
@@ -68,9 +72,18 @@ struct AccountsView: View {
                 }
             }
         }
-        .sheet(item: $signInSheet) { sheet in
+        .task {
+            await model.refresh()
+            await model.runPolling()
+        }
+        .refreshable {
+            await model.refresh()
+        }
+        .sheet(item: $signInSheet, onDismiss: {
+            Task { await model.refresh() }
+        }) { sheet in
             NavigationStack {
-                SignInView(store: store, reauthenticating: sheet.accountID) {
+                SignInView(store: model.store, reauthenticating: sheet.accountID) {
                     signInSheet = nil
                 }
                 .navigationTitle(sheet.accountID == nil ? "Add server" : "Sign in again")
@@ -83,26 +96,165 @@ struct AccountsView: View {
         }
     }
 
-    private func select(_ id: UUID) {
+    private func switchTo(_ accountID: UUID, _ companyID: String) {
         do {
-            try store.select(id)
+            try model.switchTo(accountID: accountID, companyID: companyID)
             errorMessage = nil
         } catch {
             errorMessage = userMessage(for: error)
         }
     }
 
-    private func remove(_ offsets: IndexSet) {
-        let ids = offsets.map { store.accounts[$0].id }
+    private func remove(_ id: UUID) {
         Task {
-            for id in ids {
-                do {
-                    try await store.remove(id)
-                } catch {
-                    errorMessage = userMessage(for: error)
-                }
+            do {
+                try await model.remove(id)
+                errorMessage = nil
+            } catch {
+                errorMessage = userMessage(for: error)
             }
         }
+    }
+}
+
+/// The quick switcher, opened from the company button on Today: the companies
+/// of every signed-in server. A switch closes the sheet.
+@MainActor
+struct AccountSwitcherSheet: View {
+    let model: AccountsModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(model.sections.filter { !$0.account.needsSignIn }) { section in
+                    Section {
+                        CompanyRows(model: model, section: section, onSwitch: switchTo)
+                    } header: {
+                        Text(section.account.server.displayName)
+                    } footer: {
+                        if let user = section.account.userName ?? section.account.userEmail {
+                            Text(user)
+                        }
+                    }
+                }
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Switch company")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task {
+                await model.refresh()
+                await model.runPolling()
+            }
+            .refreshable {
+                await model.refresh()
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func switchTo(_ accountID: UUID, _ companyID: String) {
+        do {
+            try model.switchTo(accountID: accountID, companyID: companyID)
+            dismiss()
+        } catch {
+            errorMessage = userMessage(for: error)
+        }
+    }
+}
+
+/// The company button on Today: "<Company> ▾". Tap or long-press opens the switcher.
+struct CompanySwitcherButton: View {
+    let companyName: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(companyName ?? "Company")
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .accessibilityHidden(true)
+            }
+        }
+        .simultaneousGesture(LongPressGesture().onEnded { _ in action() })
+        .accessibilityLabel(companyName.map { "Company: \($0)" } ?? "Company")
+        .accessibilityHint("Switches company or server")
+    }
+}
+
+/// A server's companies (tap to switch), or why there are none.
+private struct CompanyRows: View {
+    let model: AccountsModel
+    let section: AccountSection
+    let onSwitch: (UUID, String) -> Void
+
+    var body: some View {
+        let accountID = section.account.id
+        if let error = section.errorMessage {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.red)
+        } else if section.companies.isEmpty, !section.account.needsSignIn, model.isRefreshing {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+        }
+        ForEach(section.companies) { company in
+            CompanyRow(
+                company: company,
+                isCurrent: model.isCurrent(accountID: accountID, companyID: company.id),
+                badge: model.badge(accountID: accountID, companyID: company.id),
+                action: { onSwitch(accountID, company.id) }
+            )
+        }
+    }
+}
+
+private struct CompanyRow: View {
+    let company: Company
+    let isCurrent: Bool
+    let badge: Int?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(company.name)
+                Spacer()
+                if let badge, badge > 0 {
+                    Text("\(badge)")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.red))
+                        .accessibilityLabel("\(badge) need you")
+                }
+                if isCurrent {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+        .accessibilityHint(isCurrent ? "" : "Switches to this company")
     }
 }
 
@@ -123,33 +275,15 @@ private enum SignInSheet: Identifiable {
     }
 }
 
+/// The user signed in to a server, with the key-expiry warning and "Sign in again".
 private struct AccountRow: View {
     let account: Account
-    let isCurrent: Bool
-    let onSelect: () -> Void
     let onSignInAgain: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button(action: onSelect) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(account.server.displayName)
-                        if let user = account.userName ?? account.userEmail {
-                            Text(user)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
-                    if isCurrent {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.tint)
-                    }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            Label(account.userName ?? account.userEmail ?? "Signed in", systemImage: "person.crop.circle")
+                .foregroundStyle(.secondary)
 
             if let warning = keyWarning {
                 HStack {
@@ -181,6 +315,7 @@ private struct AccountRow: View {
 
 /// Adds the Settings button and sheet to a top-level screen.
 private struct SettingsButton: ViewModifier {
+    @Environment(AccountStore.self) private var store
     @State private var isShowingSettings = false
 
     func body(content: Content) -> some View {
@@ -194,7 +329,7 @@ private struct SettingsButton: ViewModifier {
             }
             .sheet(isPresented: $isShowingSettings) {
                 NavigationStack {
-                    AccountsView()
+                    AccountsView(model: AccountsModel(store: store))
                 }
             }
     }
