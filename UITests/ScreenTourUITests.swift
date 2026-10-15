@@ -84,9 +84,16 @@ final class ScreenTourUITests: XCTestCase {
     private func openTab(_ title: String, in app: XCUIApplication) {
         let button = app.tabBars.buttons[title]
         XCTAssertTrue(button.waitForExistence(timeout: 10), "No \(title) tab")
-        button.tap()
-        // Audit the new tab, not the last frames of the old one.
-        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10), "\(title) did not open")
+        // Audit the new tab, not the last frames of the old one. A tap can be
+        // lost while the old tab is still busy (the screen stays as it was, so
+        // a longer wait does not help): tap again until the tab's bar shows.
+        let bar = app.navigationBars[title]
+        var taps = 0
+        repeat {
+            button.tap()
+            taps += 1
+        } while !bar.waitForExistence(timeout: 10) && taps < 3
+        XCTAssertTrue(bar.exists, "\(title) did not open after \(taps) taps")
     }
 
     /// Taps the row labelled `title` (scrolling down, then back up, to it) and waits for its screen.
