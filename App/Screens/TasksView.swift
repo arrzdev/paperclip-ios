@@ -54,7 +54,7 @@ struct TasksView: View {
             // Runs on appear and again on every filter change, cancelling the older fetch.
             await model.refresh()
         }
-        .searchableListTitle(AppTab.tasks.title)
+        .navigationTitle(AppTab.tasks.title)
     }
 
     private struct Filters: Equatable {

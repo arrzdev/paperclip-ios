@@ -88,7 +88,7 @@ struct InboxView: View {
             await model.refresh()
             await model.runPolling()
         }
-        .searchableListTitle(AppTab.inbox.title)
+        .navigationTitle(AppTab.inbox.title)
     }
 
     @ViewBuilder
