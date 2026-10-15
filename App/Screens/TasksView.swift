@@ -19,12 +19,14 @@ struct TasksView: View {
         List {
             if case .loaded(let sections) = model.state {
                 ForEach(sections) { section in
-                    Section(section.title) {
+                    Section {
                         ForEach(section.issues, id: \.id) { issue in
                             NavigationLink(value: TaskRoute(issueID: issue.id)) {
                                 TaskRowView(issue: issue)
                             }
                         }
+                    } header: {
+                        SectionTitle(section.title)
                     }
                 }
                 if model.hasMore {
@@ -39,7 +41,7 @@ struct TasksView: View {
         .overlay { overlay }
         .newTaskButton(onNewTask)
         .safeAreaInset(edge: .top, spacing: 0) { filterBar }
-        .searchable(text: $model.searchText, prompt: "Search tasks")
+        .searchable(text: $model.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search tasks")
         .task(id: model.searchText) { await model.search() }
         .refreshable { await model.refresh() }
         .task(id: Filters(status: model.status, assignee: model.assignee)) {
@@ -65,24 +67,37 @@ struct TasksView: View {
                 filterPickers
             }
         }
-        .pickerStyle(.menu)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(.bar)
     }
 
+    /// Menus with a text label: a menu `Picker`'s own label does not scale
+    /// with the text size.
     @ViewBuilder
     private var filterPickers: some View {
-        Picker("Status", selection: $model.status) {
-            ForEach(TaskStatusFilter.allCases, id: \.self) { filter in
-                Text(filter.title).tag(filter)
+        Menu {
+            Picker("Status", selection: $model.status) {
+                ForEach(TaskStatusFilter.allCases, id: \.self) { filter in
+                    Text(filter.title).tag(filter)
+                }
             }
+        } label: {
+            FilterMenuLabel(title: model.status.title)
         }
-        Picker("Assignee", selection: $model.assignee) {
-            ForEach(model.assigneeOptions, id: \.self) { option in
-                Text(model.assigneeTitle(option)).tag(option)
+        .accessibilityLabel("Status")
+        .accessibilityValue(model.status.title)
+        Menu {
+            Picker("Assignee", selection: $model.assignee) {
+                ForEach(model.assigneeOptions, id: \.self) { option in
+                    Text(model.assigneeTitle(option)).tag(option)
+                }
             }
+        } label: {
+            FilterMenuLabel(title: model.assigneeTitle(model.assignee))
         }
+        .accessibilityLabel("Assignee")
+        .accessibilityValue(model.assigneeTitle(model.assignee))
     }
 
     private var loadMoreRow: some View {
@@ -102,7 +117,7 @@ struct TasksView: View {
             if let message = model.pageError {
                 Text(message)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
     }
@@ -143,6 +158,24 @@ struct TasksView: View {
     }
 }
 
+/// "Open ⌃⌄": the current choice of a filter menu.
+private struct FilterMenuLabel: View {
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .fixedSize(horizontal: false, vertical: true)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.caption.weight(.semibold))
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .contentShape(.rect)
+    }
+}
+
 private struct TaskRowView: View {
     let issue: Issue
 
@@ -151,11 +184,11 @@ private struct TaskRowView: View {
             AdaptiveRow {
                 Text(issue.identifier ?? "")
                     .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             } trailing: {
                 Text(issue.status.label)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             Text(issue.title)
                 .lineLimit(2)

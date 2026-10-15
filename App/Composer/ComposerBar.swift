@@ -21,7 +21,7 @@ struct ComposerBar: View {
             if let notice {
                 Text(notice)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             if let image = composer.image {
                 PendingThumbnail(image: image, canRemove: !composer.isBusy) {

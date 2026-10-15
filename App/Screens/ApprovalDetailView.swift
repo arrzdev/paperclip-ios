@@ -40,7 +40,7 @@ struct ApprovalDetailView: View {
                 Section("Comments") {
                     if detail.comments.isEmpty {
                         Text("No comments yet.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                     ForEach(detail.comments) { comment in
                         ApprovalCommentRow(author: model.authorName(for: comment), comment: comment)
@@ -75,7 +75,7 @@ struct ApprovalDetailView: View {
                 if let requester = model.requesterName {
                     Text("Requested by \(requester) · \(approval.createdAt, format: .relative(presentation: .named))")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 Label(approval.status.label, systemImage: approval.status.systemImage)
                     .font(.footnote.weight(.semibold))
@@ -197,7 +197,7 @@ private struct ApprovalCommentRow: View {
             } trailing: {
                 Text(comment.createdAt, format: .relative(presentation: .named))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             MarkdownText(source: comment.body)
         }

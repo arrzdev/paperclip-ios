@@ -87,7 +87,7 @@ struct TaskDetailView: View {
                 if let text = model.liveRunText {
                     Label(text, systemImage: "bolt.fill")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                         .symbolEffect(.pulse)
                         .transition(.opacity)
                 }
@@ -156,7 +156,7 @@ struct TaskDetailView: View {
             let items = model.threadItems
             if items.isEmpty {
                 Text("No comments yet.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             ForEach(items) { item in
                 switch item {
@@ -320,7 +320,7 @@ private struct CommentRow: View {
             } trailing: {
                 Text(comment.createdAt, format: .relative(presentation: .named))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             if !comment.body.isEmpty {
                 MarkdownText(source: comment.body)
@@ -363,7 +363,7 @@ private struct AttachmentThumbnail: View {
                 ProgressView()
             } else {
                 Image(systemName: "doc")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
         .frame(width: size, height: size)
@@ -387,7 +387,7 @@ private struct AttachmentRow: View {
             if let size = attachment.byteSize {
                 Text(Int64(size), format: .byteCount(style: .file))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
     }

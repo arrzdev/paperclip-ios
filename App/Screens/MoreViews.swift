@@ -10,41 +10,43 @@ struct MoreSection: View {
     let model: MoreModel
 
     var body: some View {
-        Section("More") {
+        Section {
             NavigationLink {
                 AgentsView(store: model.store, accountID: model.accountID)
             } label: {
-                Label("Agents", systemImage: "person.2")
+                RowLabel("Agents", systemImage: "person.2")
             }
             NavigationLink {
                 ActivityView(store: model.store, accountID: model.accountID)
             } label: {
-                Label("Activity", systemImage: "clock.arrow.circlepath")
+                RowLabel("Activity", systemImage: "clock.arrow.circlepath")
             }
             NavigationLink {
                 ApprovalsHistoryView(store: model.store, accountID: model.accountID)
             } label: {
-                Label("Approvals", systemImage: "checkmark.seal")
+                RowLabel("Approvals", systemImage: "checkmark.seal")
             }
             NavigationLink {
                 GoalsView(store: model.store, accountID: model.accountID)
             } label: {
-                Label("Goals", systemImage: "target")
+                RowLabel("Goals", systemImage: "target")
             }
             NavigationLink {
                 CostsView(store: model.store, accountID: model.accountID)
             } label: {
-                Label("Costs", systemImage: "dollarsign.circle")
+                RowLabel("Costs", systemImage: "dollarsign.circle")
             }
+        } header: {
+            SectionTitle("More")
         }
         Section {
             ForEach(WebLink.cut, id: \.self) { link in
                 WebLinkRow(link: link, url: model.url(for: link))
             }
         } header: {
-            Text("Open in web")
+            SectionTitle("Open in web")
         } footer: {
-            Text("These open \(model.companyName ?? "the company") in the browser.")
+            SectionTitle("These open \(model.companyName ?? "the company") in the browser.")
         }
     }
 }
@@ -58,17 +60,17 @@ private struct WebLinkRow: View {
         if let url {
             Link(destination: url) {
                 HStack {
-                    Label(link.title, systemImage: link.systemImage)
+                    RowLabel(link.title, systemImage: link.systemImage)
                     Spacer()
                     Image(systemName: "arrow.up.right.square")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                         .accessibilityHidden(true)
                 }
             }
             .accessibilityHint("Opens in the browser")
         } else {
-            Label(link.title, systemImage: link.systemImage)
-                .foregroundStyle(.secondary)
+            RowLabel(link.title, systemImage: link.systemImage, tintsIcon: false)
+                .foregroundStyle(Color.secondaryText)
                 .accessibilityHint("Not available yet")
         }
     }
@@ -163,15 +165,15 @@ private struct AgentRowView: View {
                 } trailing: {
                     Text(row.agent.agentStatus.label)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 if let title = row.agent.title ?? row.agent.role {
                     Text(title)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 if row.liveRun != nil {
-                    Label("Working now", systemImage: "bolt.fill")
+                    RowLabel("Working now", systemImage: "bolt.fill")
                         .font(.footnote)
                         .foregroundStyle(.tint)
                 }
@@ -204,7 +206,7 @@ struct AgentDetailView: View {
                             .font(.title3.weight(.semibold))
                         if let title = agent.title ?? agent.role {
                             Text(title)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                         HStack(spacing: 6) {
                             StatusDot(color: agent.agentStatus.color, label: "")
@@ -237,7 +239,7 @@ struct AgentDetailView: View {
                         }
                     } else {
                         Text("Not running now.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                 }
                 if let urlKey = agent.urlKey, let url = more?.url(for: .agent(urlKey: urlKey)) {
@@ -329,7 +331,7 @@ extension AgentStatus {
         case .paused: .orange
         case .error: .red
         case .pendingApproval: .yellow
-        case .terminated, .unknown: .secondary
+        case .terminated, .unknown: .secondaryText
         }
     }
 }
@@ -373,7 +375,7 @@ struct RunLogView: View {
                         if let message = model.pageError {
                             Text(message)
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                     }
                 }
@@ -470,7 +472,7 @@ private struct ActivityRowView: View {
             } trailing: {
                 Text(row.date, format: .relative(presentation: .named))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             Text(row.text)
                 .font(.subheadline)
@@ -502,11 +504,11 @@ struct ApprovalsHistoryView: View {
                             AdaptiveRow {
                                 Label(approval.status.label, systemImage: approval.status.systemImage)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                             } trailing: {
                                 Text(approval.createdAt, format: .relative(presentation: .named))
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                             }
                         }
                         .padding(.vertical, 2)
@@ -552,7 +554,7 @@ struct GoalsView: View {
                         if !meta.isEmpty {
                             Text(meta)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                     }
                     .padding(.leading, CGFloat(min(row.depth, 4)) * indent)

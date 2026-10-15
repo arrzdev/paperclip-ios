@@ -44,13 +44,15 @@ struct AccountsView: View {
                     }
                     CompanyRows(model: model, section: section, onSwitch: switchTo)
                 } header: {
-                    Text(section.account.server.displayName)
+                    ServerHeader(name: section.account.server.displayName)
                 }
             }
 
             Section {
-                Button("Add server", systemImage: "plus") {
+                Button {
                     signInSheet = .add
+                } label: {
+                    RowLabel("Add server", systemImage: "plus")
                 }
             }
 
@@ -68,7 +70,7 @@ struct AccountsView: View {
             Section {
                 Text(ContentView.pinLabel)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
         .navigationTitle(title)
@@ -139,10 +141,10 @@ struct AccountSwitcherSheet: View {
                     Section {
                         CompanyRows(model: model, section: section, onSwitch: switchTo)
                     } header: {
-                        Text(section.account.server.displayName)
+                        ServerHeader(name: section.account.server.displayName)
                     } footer: {
                         if let user = section.account.userName ?? section.account.userEmail {
-                            Text(user)
+                            SectionTitle(user)
                         }
                     }
                 }
@@ -197,6 +199,7 @@ struct CompanySwitcherButton: View {
             }
         }
         .simultaneousGesture(LongPressGesture().onEnded { _ in action() })
+        .accessibilityShowsLargeContentViewer()
         .accessibilityLabel(companyName.map { "Company: \($0)" } ?? "Company")
         .accessibilityHint("Switches company or server")
     }
@@ -247,7 +250,7 @@ private struct CompanyRow: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 2)
-                        .background(Capsule().fill(.red))
+                        .background(Capsule().fill(Color.badge))
                         .accessibilityLabel("\(badge) need you")
                 }
                 if isCurrent {
@@ -262,6 +265,16 @@ private struct CompanyRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
         .accessibilityHint(isCurrent ? "" : "Switches to this company")
+    }
+}
+
+/// A server's host as a section header; VoiceOver reads "Server <host>".
+private struct ServerHeader: View {
+    let name: String
+
+    var body: some View {
+        SectionTitle(name)
+            .accessibilityLabel("Server \(name)")
     }
 }
 
@@ -289,8 +302,8 @@ private struct AccountRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(account.userName ?? account.userEmail ?? "Signed in", systemImage: "person.crop.circle")
-                .foregroundStyle(.secondary)
+            RowLabel(account.userName ?? account.userEmail ?? "Signed in", systemImage: "person.crop.circle", tintsIcon: false)
+                .foregroundStyle(Color.secondaryText)
 
             if let warning = keyWarning {
                 HStack {

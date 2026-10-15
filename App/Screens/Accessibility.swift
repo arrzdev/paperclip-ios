@@ -49,3 +49,54 @@ struct StatusDot: View {
             .accessibilityLabel(label)
     }
 }
+
+/// An icon and a title for list rows, in place of `Label`: the accessibility
+/// audit reports `Label` rows as clipped and not scaling with the text size.
+/// The icon column grows with the text; the title wraps instead of cutting.
+struct RowLabel: View {
+    let title: String
+    let systemImage: String
+    /// False for a row that sets its own colour (the icon then follows it).
+    var tintsIcon = true
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 28
+
+    init(_ title: String, systemImage: String, tintsIcon: Bool = true) {
+        self.title = title
+        self.systemImage = systemImage
+        self.tintsIcon = tintsIcon
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            icon
+                .frame(width: iconWidth)
+                .accessibilityHidden(true)
+            Text(title)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        if tintsIcon {
+            Image(systemName: systemImage).foregroundStyle(.tint)
+        } else {
+            Image(systemName: systemImage)
+        }
+    }
+}
+
+/// A list section header or footer in the stronger secondary colour (the
+/// system one fails the contrast audit).
+struct SectionTitle: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .foregroundStyle(Color.secondaryText)
+    }
+}
