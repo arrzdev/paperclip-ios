@@ -3,16 +3,26 @@ import SwiftUI
 /// The signed-in home: Today · Inbox · Tasks · Me. Owns one `NewTaskModel`
 /// for the account's company, shared by the New task sheet (floating + on
 /// Today, Inbox and Tasks) and the Today message bar. A created task opens in
-/// the current tab.
+/// the current tab. `ContentView` keys it by account and company, so a switch
+/// builds a new one: Today reloads and the Today tab is selected.
 @MainActor
 struct HomeView: View {
+    let store: AccountStore
     let accountID: UUID
 
-    @Environment(AccountStore.self) private var store
+    /// Me → Accounts and the quick switcher opened from the Today title.
+    @State private var accounts: AccountsModel
+    @State private var showsSwitcher = false
     @State private var selection: AppTab = .today
     @State private var paths: [AppTab: NavigationPath] = [:]
     @State private var newTask: NewTaskModel?
     @State private var showsNewTask = false
+
+    init(store: AccountStore, accountID: UUID) {
+        self.store = store
+        self.accountID = accountID
+        _accounts = State(initialValue: AccountsModel(store: store))
+    }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -38,6 +48,10 @@ struct HomeView: View {
         .task(id: companyID) {
             await makeNewTask()
         }
+        .task {
+            // The company name for the Today title.
+            await accounts.refresh()
+        }
         .onChange(of: newTask?.createdIssue?.id) { _, issueID in
             guard let issueID else { return }
             showsNewTask = false
@@ -55,12 +69,22 @@ struct HomeView: View {
         switch tab {
         case .today:
             TodayView(store: store, accountID: accountID, newTask: newTask, onNewTask: openNewTask)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        CompanySwitcherButton(companyName: accounts.currentCompany?.name) {
+                            showsSwitcher = true
+                        }
+                    }
+                }
+                .sheet(isPresented: $showsSwitcher) {
+                    AccountSwitcherSheet(model: accounts)
+                }
         case .inbox:
             InboxView(store: store, accountID: accountID, onNewTask: openNewTask)
         case .tasks:
             TasksView(store: store, accountID: accountID, onNewTask: openNewTask)
         case .me:
-            AccountsView(title: tab.title, showsDoneButton: false)
+            AccountsView(model: accounts, title: tab.title, showsDoneButton: false)
         }
     }
 
