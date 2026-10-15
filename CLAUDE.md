@@ -147,6 +147,19 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   the simple top-level payload fields. Decisions follow the server: Approve / Reject on `pending`
   or `revision_requested`, Ask for changes on `pending` only; each sends its optional note as
   `decisionNote` (`POST /approvals/:id/{approve,reject,request-revision}`). Never log a note.
+- New task: one `NewTaskModel` per account and company, owned by `HomeView` and shared by the
+  New task sheet (floating **+** on Today, Inbox and Tasks) and the Today bar "Message <name>…".
+  One text field: `NewTaskText` splits it (first line = title, rest = description); a title is
+  required, no priority, labels or blockers. Assignee chip = agents from
+  `GET /companies/:id/agents`; project chip = `GET /companies/:id/projects` (default none, a failed
+  fetch only empties it). Send = `POST /companies/:id/issues` with `status: todo` and an
+  `idempotencyKey` kept in the draft until success (a retry replays, never a second task), then
+  the photo uploads to the new task, then the task opens. A failed upload keeps the photo and
+  Retry uploads only. The draft lives in the `DraftStore` under `NewTaskModel.draftKey(companyID:)`.
+- Default assignee (`DefaultAssigneeStore`, one JSON file in Application Support, not the
+  Keychain): the last agent the user gave a task to, per account and company; first use, or a
+  stored agent that is gone or terminated, = the agent with role `ceo` (`DefaultAssignee.resolve`).
+  Picking in the chip changes it only once the task is created.
 
 ## Tests
 
