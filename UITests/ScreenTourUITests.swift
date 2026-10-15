@@ -13,7 +13,8 @@ import XCTest
 /// known for a screen in one variant, is known in all of them. An element
 /// partly under the tab bar, the navigation bar or Today's message bar (or
 /// off screen) is judged against the bar's glass, not its own background: its
-/// issues are listed as "covered" and do not count.
+/// contrast issues are listed as "covered" and do not count. Its other issues
+/// (clipping, labels, Dynamic Type) count as usual.
 @MainActor
 final class ScreenTourUITests: XCTestCase {
     func testDefaultSize() {
@@ -145,7 +146,8 @@ final class ScreenTourUITests: XCTestCase {
                 try app.performAccessibilityAudit { issue in
                     let kind = issue.compactDescription
                     let label = issue.element.map { "'\($0.label)'" } ?? "no element"
-                    if let element = issue.element, !barLabels.contains(element.label),
+                    if Self.backgroundKinds.contains(kind),
+                       let element = issue.element, !barLabels.contains(element.label),
                        Self.isCovered(element.frame, screen: screenFrame, by: covers, keeping: messageBar) {
                         lines.append("covered: \(kind) — \(label)")
                         return true
@@ -168,6 +170,10 @@ final class ScreenTourUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+
+    /// The audit's kinds that judge an element against its background (the
+    /// last one: it could not tell the background). Only these can be covered.
+    static let backgroundKinds: Set<String> = ["Contrast failed", "Contrast nearly passed", "Potentially inaccessible text"]
 
     /// How far the tab bar's scroll-edge blur reaches into the content
     /// (less than the 16 pt gap above it of the floating +).

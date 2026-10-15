@@ -224,8 +224,8 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   screen and runs `performAccessibilityAudit()`. `UITests/AccessibilityBaseline.json` holds the
   issue kinds already known per screen (kinds, not counts: findings vary between runs); a new kind
   on a screen fails. The Dynamic Type kind, known for a screen in one variant, counts in all three
-  (the audit reports it unevenly). Elements under the tab, navigation or Today message bar are
-  logged as `covered` and do not fail. Fixed a kind on a screen → remove it; never add one to hide
+  (the audit reports it unevenly). Contrast issues of elements under the tab, navigation or Today
+  message bar are logged as `covered` and do not fail; their other issues count. Fixed a kind on a screen → remove it; never add one to hide
   a regression. CI job `ui-test` uploads `Paperclip-ui-screenshots`
   (screenshots, `audit-report.md`, test summary) and `Paperclip-ui-xcresult`.
 
