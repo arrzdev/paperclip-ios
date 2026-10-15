@@ -456,4 +456,128 @@ struct APIClientTests {
         #expect(sent["attachmentIds"] as? [String] == ["att-1"])
         #expect(sent["clientRequestId"] as? String == requestID.uuidString.lowercased())
     }
+
+    // MARK: - Requests (issue thread interactions)
+
+    @Test func interactionsDecodeKindsPayloadsAndUnknownValues() async throws {
+        try stub("interactions")
+        let interactions = try await client.interactions(issueId: "PAP-12")
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/issues/PAP-12/interactions")
+
+        #expect(interactions.count == 6)
+        let confirmation = interactions[0]
+        #expect(confirmation.id == "00000000-0000-4000-8000-0000000000b1")
+        #expect(confirmation.issueId == "00000000-0000-4000-8000-0000000000a1")
+        #expect(confirmation.kind == .requestConfirmation)
+        #expect(confirmation.status == .pending)
+        #expect(confirmation.createdByAgentId == "agent-1")
+        #expect(confirmation.createdAt == PaperclipDate.parse("2026-10-14T09:05:00.000Z"))
+        #expect(confirmation.resolvedAt == nil)
+        #expect(confirmation.payload.prompt == "Send the plan to the board?")
+        #expect(confirmation.payload.acceptLabel == "Send it")
+        #expect(confirmation.payload.rejectLabel == "Not yet")
+        #expect(confirmation.payload.rejectRequiresReason == false)
+        #expect(confirmation.payload.detailsMarkdown == "The plan is in the **plan** document.")
+        #expect(confirmation.payload.hasToolAction == false)
+        #expect(confirmation.payload.hasSecretProposal == false)
+
+        let questions = interactions[1]
+        #expect(questions.kind == .askUserQuestions)
+        #expect(questions.payload.title == "Two questions about the launch")
+        #expect(questions.payload.submitLabel == "Send answers")
+        let asked = try #require(questions.payload.questions)
+        #expect(asked.map(\.id) == ["q-store", "q-langs", "q-name"])
+        #expect(asked[0].prompt == "Which store first?")
+        #expect(asked[0].selectionMode == .single)
+        #expect(asked[0].required == true)
+        #expect(asked[0].options.map(\.label) == ["App Store", "Google Play"])
+        #expect(asked[0].options[1].description == "Needs a developer account")
+        #expect(asked[1].selectionMode == .multi)
+        #expect(asked[1].required == false)
+        #expect(asked[2].options.first?.freeText == true)
+
+        // Kinds, statuses and payloads this client does not know decode instead of failing.
+        #expect(interactions[2].kind == .suggestTasks)
+        #expect(interactions[3].kind == .unknown("hologram_call"))
+        #expect(interactions[3].payload.prompt == nil)
+        #expect(interactions[3].payload.questions == nil)
+        #expect(interactions[4].status == .accepted)
+        #expect(interactions[4].resolvedAt == PaperclipDate.parse("2026-10-14T08:40:00.000Z"))
+        #expect(interactions[5].status == .unknown("teleported"))
+    }
+
+    @Test func aMalformedPayloadFieldDoesNotFailTheList() async throws {
+        let json = #"[{"id":"i-1","companyId":"company-1","issueId":"issue-1","kind":"ask_user_questions","status":"pending","payload":{"version":1,"prompt":42,"questions":"not a list"},"result":null,"createdAt":"2026-10-14T09:00:00.000Z","updatedAt":"2026-10-14T09:00:00.000Z","resolvedAt":null}]"#
+        StubURLProtocol.respond { _ in .init(body: Data(json.utf8)) }
+        let interactions = try await client.interactions(issueId: "issue-1")
+        #expect(interactions.count == 1)
+        #expect(interactions[0].payload.prompt == nil)
+        #expect(interactions[0].payload.questions == nil)
+    }
+
+    @Test func confirmationWithAToolActionOrSecretIsFlagged() async throws {
+        let json = #"[{"id":"i-1","companyId":"company-1","issueId":"issue-1","kind":"request_confirmation","status":"pending","payload":{"version":1,"prompt":"Run the deploy tool?","toolAction":{"version":1,"toolName":"deploy","risk":"destructive"}},"createdAt":"2026-10-14T09:00:00.000Z","updatedAt":"2026-10-14T09:00:00.000Z","resolvedAt":null},{"id":"i-2","companyId":"company-1","issueId":"issue-1","kind":"request_confirmation","status":"pending","payload":{"version":1,"prompt":"Share the key?","secretProposal":{"version":1,"proposalId":"p-1"}},"createdAt":"2026-10-14T09:00:00.000Z","updatedAt":"2026-10-14T09:00:00.000Z","resolvedAt":null}]"#
+        StubURLProtocol.respond { _ in .init(body: Data(json.utf8)) }
+        let interactions = try await client.interactions(issueId: "issue-1")
+        #expect(interactions[0].payload.hasToolAction)
+        #expect(!interactions[0].payload.hasSecretProposal)
+        #expect(interactions[1].payload.hasSecretProposal)
+    }
+
+    @Test func acceptPostsAnEmptyBody() async throws {
+        try stub("interaction-accepted")
+        let accepted = try await client.acceptInteraction(
+            issueId: "00000000-0000-4000-8000-0000000000a1", interactionId: "00000000-0000-4000-8000-0000000000b1"
+        )
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString
+            == "https://paperclip.test/api/issues/00000000-0000-4000-8000-0000000000a1/interactions/00000000-0000-4000-8000-0000000000b1/accept")
+        #expect(try jsonBody(request).isEmpty)
+        #expect(accepted.status == .accepted)
+        #expect(accepted.resolvedAt == PaperclipDate.parse("2026-10-14T09:30:00.000Z"))
+    }
+
+    @Test func rejectSendsTheReasonOnlyWhenThereIsOne() async throws {
+        try stub("interaction-accepted")
+        _ = try await client.rejectInteraction(issueId: "issue-1", interactionId: "i-1", reason: "Too early")
+        var request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.url?.path == "/api/issues/issue-1/interactions/i-1/reject")
+        #expect(try jsonBody(request) as? [String: String] == ["reason": "Too early"])
+
+        _ = try await client.rejectInteraction(issueId: "issue-1", interactionId: "i-1", reason: nil)
+        request = try #require(StubURLProtocol.lastRequest)
+        #expect(try jsonBody(request).isEmpty)
+    }
+
+    @Test func respondSendsOneAnswerPerQuestion() async throws {
+        try stub("interaction-accepted")
+        _ = try await client.respondToInteraction(issueId: "issue-1", interactionId: "i-2", answers: [
+            InteractionAnswer(questionId: "q-store", optionIds: ["o-ios"]),
+            InteractionAnswer(questionId: "q-langs", optionIds: ["o-en", "o-pt"]),
+            InteractionAnswer(questionId: "q-name", optionIds: ["o-name"], otherText: "Paperclip"),
+        ])
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path == "/api/issues/issue-1/interactions/i-2/respond")
+        let body = try jsonBody(request)
+        #expect(body.keys.sorted() == ["answers"])
+        let answers = try #require(body["answers"] as? [[String: Any]])
+        #expect(answers.map { $0["questionId"] as? String } == ["q-store", "q-langs", "q-name"])
+        #expect(answers[1]["optionIds"] as? [String] == ["o-en", "o-pt"])
+        // No otherText key unless there is text.
+        #expect(answers[0].keys.sorted() == ["optionIds", "questionId"])
+        #expect(answers[2]["otherText"] as? String == "Paperclip")
+    }
+
+    @Test func anAlreadyAnsweredRequestIsAConflict() async throws {
+        StubURLProtocol.respond { _ in
+            .init(status: 409, body: Data(#"{"error":"Interaction is no longer pending","code":"interaction_already_resolved"}"#.utf8))
+        }
+        await #expect(throws: APIError.server(status: 409, body: "Interaction is no longer pending")) {
+            _ = try await client.acceptInteraction(issueId: "issue-1", interactionId: "i-1")
+        }
+    }
 }

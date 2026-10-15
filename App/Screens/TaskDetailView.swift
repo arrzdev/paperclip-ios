@@ -11,6 +11,8 @@ struct TaskDetailView: View {
     @State private var model: TaskDetailModel
     @State private var showsReopen = false
     @State private var previewURL: URL?
+    @State private var requestSheet: RequestSheet?
+    @Environment(\.openURL) private var openURL
     /// Built once the task is loaded (the upload needs its company).
     @State private var composer: CommentComposer?
 
@@ -35,11 +37,11 @@ struct TaskDetailView: View {
                         }
                     }
                 }
-                thread(detail.comments)
+                thread
             }
         }
         .listStyle(.insetGrouped)
-        .animation(.default, value: model.detail?.comments.count)
+        .animation(.default, value: model.threadItems.map(\.id))
         .overlay { overlay }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         .refreshable { await model.refresh() }
@@ -53,6 +55,8 @@ struct TaskDetailView: View {
             ReopenSheet(model: model)
         }
         .quickLookPreview($previewURL)
+        .requestSheet($requestSheet, actions: model.requests)
+        .sendsPendingRequests(model.requests)
         .onChange(of: model.detail?.issue.id, initial: true) { _, _ in
             makeComposer()
         }
@@ -146,20 +150,29 @@ struct TaskDetailView: View {
         }
     }
 
-    private func thread(_ comments: [IssueComment]) -> some View {
+    /// Comments and pending requests, oldest first.
+    private var thread: some View {
         Section("Thread") {
-            if comments.isEmpty {
+            let items = model.threadItems
+            if items.isEmpty {
                 Text("No comments yet.")
                     .foregroundStyle(.secondary)
             }
-            ForEach(comments) { comment in
-                CommentRow(
-                    author: model.authorName(for: comment),
-                    comment: comment,
-                    attachments: model.attachments(for: comment),
-                    model: model,
-                    onOpen: open
-                )
+            ForEach(items) { item in
+                switch item {
+                case .comment(let comment):
+                    CommentRow(
+                        author: model.authorName(for: comment),
+                        comment: comment,
+                        attachments: model.attachments(for: comment),
+                        model: model,
+                        onOpen: open
+                    )
+                case .request(let card):
+                    RequestRow(card: card, actions: model.requests, onSheet: { requestSheet = $0 }) {
+                        if let url = model.webURL(for: card.webPath) { openURL(url) }
+                    }
+                }
             }
         }
     }
@@ -169,6 +182,14 @@ struct TaskDetailView: View {
         VStack(spacing: 8) {
             if let message = model.actionError, !showsReopen {
                 ActionErrorBanner(message: message) { model.dismissActionError() }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if let message = model.requests.error {
+                ActionErrorBanner(message: message) { model.requests.dismissError() }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if let pending = model.requests.pending {
+                RequestUndoToast(pending: pending) { model.requests.undo() }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if model.showsReviewBar {
@@ -205,6 +226,8 @@ struct TaskDetailView: View {
             }
         }
         .animation(.snappy, value: model.actionError)
+        .animation(.snappy, value: model.requests.error)
+        .animation(.snappy, value: model.requests.pending)
         .animation(.snappy, value: model.showsReviewBar)
     }
 

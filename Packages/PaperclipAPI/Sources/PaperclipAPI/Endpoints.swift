@@ -164,6 +164,42 @@ public extension APIClient {
     }
 }
 
+public extension APIClient {
+    // MARK: Requests (issue thread interactions)
+
+    /// Every request on the task, resolved ones included, oldest first.
+    func interactions(issueId: String) async throws -> [IssueInteraction] {
+        try await send(.get, "/issues/\(segment(issueId))/interactions")
+    }
+
+    func acceptInteraction(issueId: String, interactionId: String) async throws -> IssueInteraction {
+        try await send(.post, interactionPath(issueId, interactionId, "accept"), body: EmptyBody())
+    }
+
+    /// `reason` is not sent when nil.
+    func rejectInteraction(issueId: String, interactionId: String, reason: String?) async throws -> IssueInteraction {
+        try await send(.post, interactionPath(issueId, interactionId, "reject"), body: RejectBody(reason: reason))
+    }
+
+    func respondToInteraction(issueId: String, interactionId: String, answers: [InteractionAnswer]) async throws -> IssueInteraction {
+        try await send(.post, interactionPath(issueId, interactionId, "respond"), body: RespondBody(answers: answers))
+    }
+
+    private func interactionPath(_ issueId: String, _ interactionId: String, _ action: String) -> String {
+        "/issues/\(segment(issueId))/interactions/\(segment(interactionId))/\(action)"
+    }
+}
+
+private struct EmptyBody: Encodable {}
+
+private struct RejectBody: Encodable {
+    let reason: String?
+}
+
+private struct RespondBody: Encodable {
+    let answers: [InteractionAnswer]
+}
+
 /// A file name safe inside a quoted multipart header.
 private func quoted(_ name: String) -> String {
     name.replacingOccurrences(of: "\\", with: "_")

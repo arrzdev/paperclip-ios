@@ -17,6 +17,9 @@ struct NeedsYouCard: Equatable, Identifiable, Sendable {
     let issueID: String?
     /// Path in the web UI; Open goes there when the card has no issue.
     let webPath: String?
+    /// The request behind an interaction card, with its buttons; nil when its
+    /// fetch failed (the card only opens the task).
+    var request: InteractionCard? = nil
 }
 
 /// An unread thread with the first line of its newest reply not written by me.
@@ -83,6 +86,8 @@ final class TodayModel {
     private(set) var undo: InboxUndo?
     /// Set when an action failed and was rolled back.
     private(set) var actionError: String?
+    /// Accept, Reject and Answer on request cards.
+    let requests: RequestActions
 
     init(
         store: AccountStore,
@@ -96,14 +101,18 @@ final class TodayModel {
         self.poller = poller
         self.now = now
         self.calendar = calendar
+        requests = RequestActions(store: store, accountID: accountID)
     }
 
     var state: LoadState<TodayContent> {
+        if requests.needsSignIn { return .needsSignIn }
         if let failure { return failure }
         guard let cards, replies != nil else { return .loading }
+        // A request answered here leaves at once.
+        let visible = cards.filter { card in card.request.map { !requests.isHidden($0.id) } ?? true }
         let rows = visibleReplies().map { ReplyRow(issue: $0, preview: previews[$0.id]?.text) }
-        if cards.isEmpty && rows.isEmpty { return .empty }
-        return .loaded(TodayContent(needsYou: cards, newReplies: rows))
+        if visible.isEmpty && rows.isEmpty { return .empty }
+        return .loaded(TodayContent(needsYou: visible, newReplies: rows))
     }
 
     /// Full fetch (screen appears, pull to refresh).
@@ -243,22 +252,49 @@ final class TodayModel {
             query.status = Self.assignedStatuses
             let mine = try await store.call(accountID) { try await $0.issues(companyId: companyId, query: query) }
 
-            let requests = feed.items.compactMap(Self.card(for:))
-            let carded = Set(requests.compactMap(\.issueID))
+            let attention = try await withRequests(feed.items.compactMap(Self.card(for:)))
+            let carded = Set(attention.compactMap(\.issueID))
             let tasks = mine.filter { !carded.contains($0.id) }.map { issue in
                 NeedsYouCard(
                     id: issue.id, kind: .assignedTask, title: issue.title, identifier: issue.identifier,
                     detail: issue.status.label, issueID: issue.id, webPath: webPath(identifier: issue.identifier)
                 )
             }
-            return .success(requests + tasks)
+            return .success(attention + tasks)
         } catch {
             return .failure(error)
         }
     }
 
+    /// Pairs each interaction card with its request, one fetch per task. A
+    /// request no longer pending drops its card; a failed fetch leaves the
+    /// card without buttons, except a 401.
+    private func withRequests(_ entries: [(card: NeedsYouCard, subjectID: String)]) async throws -> [NeedsYouCard] {
+        var issueIDs: [String] = []
+        for entry in entries where entry.card.kind == .interaction {
+            if let issueID = entry.card.issueID, !issueIDs.contains(issueID) { issueIDs.append(issueID) }
+        }
+        var interactions: [String: [IssueInteraction]] = [:]
+        for issueID in issueIDs {
+            do {
+                interactions[issueID] = try await store.call(accountID) { try await $0.interactions(issueId: issueID) }
+            } catch {
+                if isUnauthorized(error) { throw error }
+                store.log("Today requests failed for account \(accountID): \(userMessage(for: error))")
+            }
+        }
+        return entries.compactMap { entry -> NeedsYouCard? in
+            var card = entry.card
+            guard card.kind == .interaction, let issueID = card.issueID,
+                  let interaction = interactions[issueID]?.first(where: { $0.id == entry.subjectID }) else { return card }
+            guard interaction.status == .pending else { return nil }
+            card.request = InteractionCard(interaction, identifier: card.identifier, issueTitle: card.title)
+            return card
+        }
+    }
+
     /// Nil for attention kinds Today does not show (failed runs, budgets, …).
-    private static func card(for item: AttentionItem) -> NeedsYouCard? {
+    private static func card(for item: AttentionItem) -> (card: NeedsYouCard, subjectID: String)? {
         let kind: NeedsYouCard.Kind
         switch item.sourceKind {
         case .issueThreadInteraction: kind = .interaction
@@ -269,7 +305,7 @@ final class TodayModel {
         let issue = item.relatedIssue ?? (item.subject.kind == "issue" ? item.subject : nil)
         let identifier = issue?.identifier ?? item.subject.identifier
         let detail = item.detail?.promptExcerpt ?? item.detail?.firstQuestionText ?? item.detail?.summaryExcerpt
-        return NeedsYouCard(
+        let card = NeedsYouCard(
             id: item.id,
             kind: kind,
             title: issue?.title ?? item.subject.title ?? item.whyNow ?? "",
@@ -278,6 +314,7 @@ final class TodayModel {
             issueID: issue?.id,
             webPath: item.relatedIssue?.href ?? item.subject.href ?? webPath(identifier: identifier)
         )
+        return (card, item.subject.id)
     }
 
     private func loadReplies(since: Date?) async -> Result<[Issue], Error> {

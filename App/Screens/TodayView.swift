@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor
 struct TodayView: View {
     @State private var model: TodayModel
+    @State private var requestSheet: RequestSheet?
     @Environment(\.openURL) private var openURL
 
     init(store: AccountStore, accountID: UUID) {
@@ -20,7 +21,11 @@ struct TodayView: View {
                 if !content.needsYou.isEmpty {
                     Section {
                         ForEach(content.needsYou) { card in
-                            NeedsYouCardView(card: card) { open(card.webPath) }
+                            NeedsYouCardView(
+                                card: card, actions: model.requests,
+                                onSheet: { requestSheet = $0 },
+                                onOpen: { open($0) }
+                            )
                         }
                     } header: {
                         SectionHeader(title: "Needs you", count: content.needsYou.count)
@@ -57,11 +62,21 @@ struct TodayView: View {
         }
         .listStyle(.insetGrouped)
         .animation(.default, value: model.state)
+        .requestSheet($requestSheet, actions: model.requests)
+        .sendsPendingRequests(model.requests)
         .overlay { overlay }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
                 if let message = model.actionError {
                     ActionErrorBanner(message: message) { model.dismissActionError() }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if let message = model.requests.error {
+                    ActionErrorBanner(message: message) { model.requests.dismissError() }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if let pending = model.requests.pending {
+                    RequestUndoToast(pending: pending) { model.requests.undo() }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 if let undo = model.undo {
@@ -85,6 +100,8 @@ struct TodayView: View {
             .padding(.bottom, 8)
             .animation(.snappy, value: model.undo)
             .animation(.snappy, value: model.actionError)
+            .animation(.snappy, value: model.requests.error)
+            .animation(.snappy, value: model.requests.pending)
             .animation(.default, value: model.pulse)
         }
         .task(id: model.undo) {
@@ -151,7 +168,10 @@ private struct SectionHeader: View {
 
 private struct NeedsYouCardView: View {
     let card: NeedsYouCard
-    let onOpen: () -> Void
+    let actions: RequestActions
+    let onSheet: (RequestSheet) -> Void
+    /// Opens a web path on the account's server.
+    let onOpen: (String?) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -175,17 +195,21 @@ private struct NeedsYouCardView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
             }
-            if let route = card.route {
-                NavigationLink("Open", value: route)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .padding(.top, 2)
-            } else if card.webPath != nil {
-                Button("Open", action: onOpen)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .padding(.top, 2)
+            HStack(spacing: 8) {
+                if let request = card.request {
+                    RequestButtons(card: request, actions: actions, onSheet: onSheet) { onOpen(request.webPath) }
+                }
+                if let route = card.route {
+                    NavigationLink("Open", value: route)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                } else if card.webPath != nil {
+                    Button("Open") { onOpen(card.webPath) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
             }
+            .padding(.top, 2)
         }
         .padding(.vertical, 4)
     }

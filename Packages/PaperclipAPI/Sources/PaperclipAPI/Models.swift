@@ -500,3 +500,209 @@ public struct Dashboard: Decodable, Equatable, Sendable {
     public let tasks: Tasks
     public let pendingApprovals: Int?
 }
+
+// MARK: - Requests (issue thread interactions)
+
+public enum InteractionKind: Codable, Hashable, Sendable {
+    case suggestTasks, askUserQuestions, requestConfirmation, requestCheckboxConfirmation
+    case requestItemVerdicts, connectionIntent
+    case unknown(String)
+
+    private static let known: [(InteractionKind, String)] = [
+        (.suggestTasks, "suggest_tasks"),
+        (.askUserQuestions, "ask_user_questions"),
+        (.requestConfirmation, "request_confirmation"),
+        (.requestCheckboxConfirmation, "request_checkbox_confirmation"),
+        (.requestItemVerdicts, "request_item_verdicts"),
+        (.connectionIntent, "connection_intent"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public enum InteractionStatus: Codable, Hashable, Sendable {
+    case pending, accepted, rejected, answered, cancelled, expired, failed
+    case unknown(String)
+
+    private static let known: [(InteractionStatus, String)] = [
+        (.pending, "pending"),
+        (.accepted, "accepted"),
+        (.rejected, "rejected"),
+        (.answered, "answered"),
+        (.cancelled, "cancelled"),
+        (.expired, "expired"),
+        (.failed, "failed"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public enum QuestionSelectionMode: Codable, Hashable, Sendable {
+    case single, multi
+    case unknown(String)
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "single": self = .single
+        case "multi": self = .multi
+        default: self = .unknown(rawValue)
+        }
+    }
+
+    public var rawValue: String {
+        switch self {
+        case .single: "single"
+        case .multi: "multi"
+        case .unknown(let value): value
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public struct QuestionOption: Decodable, Equatable, Sendable {
+    public let id: String
+    public let label: String
+    public let description: String?
+    /// The option is a text field; its text goes back as `otherText`.
+    public let freeText: Bool?
+}
+
+/// One question of an `ask_user_questions` request.
+public struct InteractionQuestion: Decodable, Equatable, Sendable {
+    public let id: String
+    public let prompt: String
+    public let helpText: String?
+    public let selectionMode: QuestionSelectionMode
+    public let required: Bool?
+    public let allowOther: Bool?
+    public let options: [QuestionOption]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, prompt, helpText, selectionMode, required, allowOther, options
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        prompt = try container.decode(String.self, forKey: .prompt)
+        helpText = try? container.decodeIfPresent(String.self, forKey: .helpText)
+        selectionMode = try container.decode(QuestionSelectionMode.self, forKey: .selectionMode)
+        required = try? container.decodeIfPresent(Bool.self, forKey: .required)
+        allowOther = try? container.decodeIfPresent(Bool.self, forKey: .allowOther)
+        options = try container.decodeIfPresent([QuestionOption].self, forKey: .options) ?? []
+    }
+}
+
+/// The fields of an interaction's `payload` the app uses. Each is decoded on
+/// its own and is nil when missing or of another type, so a payload of a kind
+/// this client does not know never fails the list.
+public struct InteractionPayload: Decodable, Equatable, Sendable {
+    public let title: String?
+    public let prompt: String?
+    public let detailsMarkdown: String?
+    public let acceptLabel: String?
+    public let rejectLabel: String?
+    public let rejectRequiresReason: Bool?
+    public let submitLabel: String?
+    public let questions: [InteractionQuestion]?
+    /// The confirmation runs a tool when accepted.
+    public let hasToolAction: Bool
+    /// The confirmation shares a secret when accepted.
+    public let hasSecretProposal: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case title, prompt, detailsMarkdown, acceptLabel, rejectLabel, rejectRequiresReason, submitLabel
+        case questions, toolAction, secretProposal
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        func text(_ key: CodingKeys) -> String? {
+            (try? container?.decodeIfPresent(String.self, forKey: key)) ?? nil
+        }
+        func present(_ key: CodingKeys) -> Bool {
+            guard let container, container.contains(key) else { return false }
+            return (try? container.decodeNil(forKey: key)) == false
+        }
+        title = text(.title)
+        prompt = text(.prompt)
+        detailsMarkdown = text(.detailsMarkdown)
+        acceptLabel = text(.acceptLabel)
+        rejectLabel = text(.rejectLabel)
+        submitLabel = text(.submitLabel)
+        rejectRequiresReason = (try? container?.decodeIfPresent(Bool.self, forKey: .rejectRequiresReason)) ?? nil
+        questions = (try? container?.decodeIfPresent([InteractionQuestion].self, forKey: .questions)) ?? nil
+        hasToolAction = present(.toolAction)
+        hasSecretProposal = present(.secretProposal)
+    }
+}
+
+/// A request an agent left on a task (`GET /api/issues/:id/interactions`).
+public struct IssueInteraction: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let issueId: String
+    public let kind: InteractionKind
+    public let status: InteractionStatus
+    public let title: String?
+    public let summary: String?
+    public let createdByAgentId: String?
+    public let createdByUserId: String?
+    public let payload: InteractionPayload
+    public let createdAt: Date
+    public let updatedAt: Date?
+    public let resolvedAt: Date?
+}
+
+/// One answer of `POST /api/issues/:id/interactions/:iid/respond`.
+public struct InteractionAnswer: Encodable, Equatable, Sendable {
+    public let questionId: String
+    public let optionIds: [String]
+    /// Not sent when nil.
+    public let otherText: String?
+
+    public init(questionId: String, optionIds: [String], otherText: String? = nil) {
+        self.questionId = questionId
+        self.optionIds = optionIds
+        self.otherText = otherText
+    }
+}

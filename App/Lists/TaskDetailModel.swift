@@ -22,12 +22,16 @@ final class TaskDetailModel {
     let issueID: String
     private let poller: Poller
 
-    private(set) var state: LoadState<TaskDetail> = .loading
+    private var loadState: LoadState<TaskDetail> = .loading
     /// Assignee picker options.
     private(set) var agents: [Agent] = []
     private(set) var liveRuns: [LiveRun] = []
     /// Set when a change failed and was rolled back.
     private(set) var actionError: String?
+    /// Accept, Reject and Answer on the requests in the thread.
+    let requests: RequestActions
+    /// The task's requests, answered ones included; [] when their fetch failed.
+    private var interactions: [IssueInteraction] = []
 
     /// Picker values shown while their change is on the way.
     private var pendingStatus: IssueStatus?
@@ -41,6 +45,11 @@ final class TaskDetailModel {
         self.accountID = accountID
         self.issueID = issueID
         self.poller = poller
+        requests = RequestActions(store: store, accountID: accountID)
+    }
+
+    var state: LoadState<TaskDetail> {
+        requests.needsSignIn ? .needsSignIn : loadState
     }
 
     /// Done ✓ and Re-open show only while the task waits for review or is done.
@@ -83,9 +92,33 @@ final class TaskDetailModel {
         account?.userId
     }
 
+    /// The web page for `path` (a request opened in web), on this account's server.
+    func webURL(for path: String?) -> URL? {
+        guard let path, let base = account?.server.baseURL.absoluteString else { return nil }
+        let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
+        return URL(string: trimmed + path)
+    }
+
     /// Files sent with `comment` (photos show as thumbnails under it).
     func attachments(for comment: IssueComment) -> [Attachment] {
         detail?.attachments.filter { $0.issueCommentId == comment.id } ?? []
+    }
+
+    /// Comments and pending requests, oldest first; a comment goes before a
+    /// request of the same time.
+    var threadItems: [ThreadItem] {
+        guard let detail else { return [] }
+        let comments = detail.comments.map(ThreadItem.comment)
+        let cards = interactions
+            .filter { $0.status == .pending && !requests.isHidden($0.id) }
+            .map { ThreadItem.request(InteractionCard($0, identifier: detail.issue.identifier, issueTitle: detail.issue.title)) }
+        let items = comments + cards
+        return items.indices
+            .sorted { first, second in
+                let (a, b) = (items[first].createdAt, items[second].createdAt)
+                return a == b ? first < second : a < b
+            }
+            .map { items[$0] }
     }
 
     func authorName(for comment: IssueComment) -> String {
@@ -109,9 +142,9 @@ final class TaskDetailModel {
             comments = try await store.call(accountID) { try await $0.commentThread(issueId: issueID) }
         } catch {
             if case APIError.unauthorized = error {
-                state = .needsSignIn
+                loadState = .needsSignIn
             } else {
-                state = .error(userMessage(for: error))
+                loadState = .error(userMessage(for: error))
             }
             store.log("Task detail failed for account \(accountID): \(userMessage(for: error))")
             return
@@ -122,7 +155,8 @@ final class TaskDetailModel {
         liveRuns = await extra { try await $0.liveRuns(issueId: issueID) } ?? []
         let companyId = issue.companyId
         agents = await extra { try await $0.agents(companyId: companyId) } ?? []
-        state = .loaded(TaskDetail(issue: issue, comments: comments, documents: documents, attachments: attachments))
+        interactions = await extra { try await $0.interactions(issueId: issueID) } ?? []
+        loadState = .loaded(TaskDetail(issue: issue, comments: comments, documents: documents, attachments: attachments))
         await markRead()
     }
 
@@ -141,6 +175,7 @@ final class TaskDetailModel {
             return
         }
         liveRuns = await extra { try await $0.liveRuns(issueId: issueID) } ?? liveRuns
+        interactions = await extra { try await $0.interactions(issueId: issueID) } ?? interactions
         do {
             if try await fetchNewComments() > 0 {
                 if let attachments = await extra({ try await $0.attachments(issueId: issueID) }) {
@@ -268,7 +303,7 @@ final class TaskDetailModel {
             return true
         } catch {
             if case APIError.unauthorized = error {
-                state = .needsSignIn
+                loadState = .needsSignIn
             } else {
                 actionError = userMessage(for: error)
             }
@@ -312,12 +347,12 @@ final class TaskDetailModel {
     private func update(_ change: (inout TaskDetail) -> Void) {
         guard var detail else { return }
         change(&detail)
-        state = .loaded(detail)
+        loadState = .loaded(detail)
     }
 
     private func fail(polling error: Error) {
         if case APIError.unauthorized = error {
-            state = .needsSignIn
+            loadState = .needsSignIn
         } else {
             store.log("Task detail poll failed for account \(accountID): \(userMessage(for: error))")
         }
