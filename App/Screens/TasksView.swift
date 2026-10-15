@@ -67,37 +67,24 @@ struct TasksView: View {
                 filterPickers
             }
         }
+        .pickerStyle(.menu)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(.bar)
     }
 
-    /// Menus with a text label: a menu `Picker`'s own label does not scale
-    /// with the text size.
     @ViewBuilder
     private var filterPickers: some View {
-        Menu {
-            Picker("Status", selection: $model.status) {
-                ForEach(TaskStatusFilter.allCases, id: \.self) { filter in
-                    Text(filter.title).tag(filter)
-                }
+        Picker("Status", selection: $model.status) {
+            ForEach(TaskStatusFilter.allCases, id: \.self) { filter in
+                Text(filter.title).tag(filter)
             }
-        } label: {
-            FilterMenuLabel(title: model.status.title)
         }
-        .accessibilityLabel("Status")
-        .accessibilityValue(model.status.title)
-        Menu {
-            Picker("Assignee", selection: $model.assignee) {
-                ForEach(model.assigneeOptions, id: \.self) { option in
-                    Text(model.assigneeTitle(option)).tag(option)
-                }
+        Picker("Assignee", selection: $model.assignee) {
+            ForEach(model.assigneeOptions, id: \.self) { option in
+                Text(model.assigneeTitle(option)).tag(option)
             }
-        } label: {
-            FilterMenuLabel(title: model.assigneeTitle(model.assignee))
         }
-        .accessibilityLabel("Assignee")
-        .accessibilityValue(model.assigneeTitle(model.assignee))
     }
 
     private var loadMoreRow: some View {
@@ -155,25 +142,6 @@ struct TasksView: View {
                 description: Text("The server rejected the key for this account.")
             )
         }
-    }
-}
-
-/// "Open ⌃⌄": the current choice of a filter menu.
-private struct FilterMenuLabel: View {
-    let title: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(title)
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
-            Image(systemName: "chevron.up.chevron.down")
-                .font(.caption.weight(.semibold))
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .contentShape(.rect)
     }
 }
 

@@ -4,24 +4,19 @@
   ],
   "ax5 Me-Accounts": [
     "Contrast failed",
-    "Dynamic Type font sizes are partially unsupported",
-    "Label not human-readable",
-    "Text clipped"
+    "Dynamic Type font sizes are partially unsupported"
   ],
   "ax5 Me-More-Activity": [
     "Contrast failed",
     "Dynamic Type font sizes are partially unsupported"
   ],
   "ax5 Me-More-Agents": [
-    "Contrast failed",
-    "Dynamic Type font sizes are partially unsupported",
-    "Text clipped"
+    "Dynamic Type font sizes are partially unsupported"
   ],
   "ax5 Me-More-Approvals": [
     "Contrast failed"
   ],
   "ax5 Me-More-Costs": [
-    "Contrast failed",
     "Dynamic Type font sizes are partially unsupported"
   ],
   "ax5 Tasks": [
@@ -39,23 +34,18 @@
   ],
   "dark Me-Accounts": [
     "Contrast failed",
-    "Dynamic Type font sizes are partially unsupported",
-    "Label not human-readable",
-    "Text clipped"
+    "Dynamic Type font sizes are partially unsupported"
   ],
   "dark Me-More-Activity": [
     "Dynamic Type font sizes are partially unsupported"
   ],
   "dark Me-More-Agents": [
-    "Dynamic Type font sizes are partially unsupported",
-    "Text clipped"
+    "Dynamic Type font sizes are partially unsupported"
   ],
   "dark Me-More-Costs": [
     "Dynamic Type font sizes are partially unsupported"
   ],
   "dark Tasks": [
-    "Contrast failed",
-    "Potentially inaccessible text",
     "Text clipped"
   ],
   "dark Today": [
@@ -64,43 +54,27 @@
     "Dynamic Type font sizes are partially unsupported"
   ],
   "default Inbox": [
-    "Contrast nearly passed",
     "Dynamic Type font sizes are partially unsupported",
     "Text clipped"
   ],
   "default Me-Accounts": [
     "Contrast failed",
-    "Dynamic Type font sizes are partially unsupported",
-    "Label not human-readable",
-    "Text clipped"
+    "Dynamic Type font sizes are partially unsupported"
   ],
   "default Me-More-Activity": [
-    "Contrast nearly passed",
     "Dynamic Type font sizes are partially unsupported"
   ],
   "default Me-More-Agents": [
-    "Contrast nearly passed",
-    "Dynamic Type font sizes are partially unsupported",
-    "Text clipped"
-  ],
-  "default Me-More-Approvals": [
-    "Contrast nearly passed"
+    "Dynamic Type font sizes are partially unsupported"
   ],
   "default Me-More-Costs": [
     "Dynamic Type font sizes are partially unsupported"
   ],
-  "default Me-More-Goals": [
-    "Contrast nearly passed"
-  ],
   "default Tasks": [
-    "Contrast failed",
-    "Contrast nearly passed",
-    "Potentially inaccessible text",
     "Text clipped"
   ],
   "default Today": [
     "Contrast failed",
-    "Contrast nearly passed",
     "Dynamic Type font sizes are partially unsupported"
   ]
 }

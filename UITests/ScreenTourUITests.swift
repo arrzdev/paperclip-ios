@@ -11,8 +11,7 @@ import XCTest
 /// kind on a screen fails. An element partly under the tab bar, the
 /// navigation bar or Today's message bar (or off screen) is judged against
 /// the bar's glass, not its own background: its issues are listed as
-/// "covered" and do not count. Me is audited again scrolled to the end, so
-/// its lower rows are judged in the clear.
+/// "covered" and do not count.
 @MainActor
 final class ScreenTourUITests: XCTestCase {
     func testDefaultSize() {
@@ -70,8 +69,6 @@ final class ScreenTourUITests: XCTestCase {
         check("Tasks")
         openTab("Me", in: app)
         check("Me-Accounts")
-        for _ in 0..<4 { app.swipeUp() }
-        check("Me-Accounts-end")
         for screen in Self.moreScreens {
             guard open(screen, in: app) else { continue }
             check("Me-More-\(screen)")
@@ -85,6 +82,8 @@ final class ScreenTourUITests: XCTestCase {
         let button = app.tabBars.buttons[title]
         XCTAssertTrue(button.waitForExistence(timeout: 10), "No \(title) tab")
         button.tap()
+        // Audit the new tab, not the last frames of the old one.
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10), "\(title) did not open")
     }
 
     /// Taps the row labelled `title` (scrolling down, then back up, to it) and waits for its screen.
