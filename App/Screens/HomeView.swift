@@ -58,8 +58,7 @@ struct HomeView: View {
         case .inbox:
             InboxView(store: store, accountID: accountID, onNewTask: openNewTask)
         case .tasks:
-            ComingSoonView(tab: tab, message: "The task list comes in a later version.")
-                .newTaskButton(openNewTask)
+            TasksView(store: store, accountID: accountID, onNewTask: openNewTask)
         case .me:
             AccountsView(title: tab.title, showsDoneButton: false)
         }
@@ -95,16 +94,5 @@ struct HomeView: View {
             )
         }
         await newTask?.load()
-    }
-}
-
-/// A tab that has no content yet.
-private struct ComingSoonView: View {
-    let tab: AppTab
-    let message: String
-
-    var body: some View {
-        ContentUnavailableView(tab.title, systemImage: tab.systemImage, description: Text(message))
-            .navigationTitle(tab.title)
     }
 }
