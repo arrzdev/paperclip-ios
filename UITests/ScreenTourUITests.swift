@@ -8,7 +8,11 @@ import XCTest
 /// `AccessibilityBaseline.json` lists its kind for that screen (the kinds
 /// already known there; the audit's exact findings vary between runs, so it
 /// holds kinds, not counts). Fixing a kind on a screen removes it there; a new
-/// kind on a screen fails.
+/// kind on a screen fails. An element partly under the tab bar, the
+/// navigation bar or Today's message bar (or off screen) is judged against
+/// the bar's glass, not its own background: its issues are listed as
+/// "covered" and do not count. Me is audited again scrolled to the end, so
+/// its lower rows are judged in the clear.
 @MainActor
 final class ScreenTourUITests: XCTestCase {
     func testDefaultSize() {
@@ -66,6 +70,8 @@ final class ScreenTourUITests: XCTestCase {
         check("Tasks")
         openTab("Me", in: app)
         check("Me-Accounts")
+        for _ in 0..<4 { app.swipeUp() }
+        check("Me-Accounts-end")
         for screen in Self.moreScreens {
             guard open(screen, in: app) else { continue }
             check("Me-More-\(screen)")
@@ -131,9 +137,15 @@ final class ScreenTourUITests: XCTestCase {
         for attempt in 1...2 {
             lines = []
             do {
+                let covers = coveringFrames(app)
+                let screenFrame = app.windows.firstMatch.frame
                 try app.performAccessibilityAudit { issue in
                     let kind = issue.compactDescription
                     let label = issue.element.map { "'\($0.label)'" } ?? "no element"
+                    if let frame = issue.element?.frame, Self.isCovered(frame, screen: screenFrame, by: covers) {
+                        lines.append("covered: \(kind) — \(label)")
+                        return true
+                    }
                     let isKnown = known.contains(kind)
                     lines.append("\(isKnown ? "known" : "NEW"): \(kind) — \(label)")
                     return isKnown
@@ -151,6 +163,29 @@ final class ScreenTourUITests: XCTestCase {
         attachment.name = "\(screen) audit"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// The bars content scrolls under: tab bar, navigation bar, and Today's
+    /// message bar (from just above its text field down).
+    private func coveringFrames(_ app: XCUIApplication) -> [CGRect] {
+        var frames: [CGRect] = []
+        for bar in [app.tabBars.firstMatch, app.navigationBars.firstMatch] where bar.exists {
+            frames.append(bar.frame)
+        }
+        let message = app.textFields.matching(NSPredicate(format: "placeholderValue BEGINSWITH %@", "Message")).firstMatch
+        if message.exists {
+            let field = message.frame
+            let top = field.minY - 16
+            frames.append(CGRect(x: 0, y: top, width: app.windows.firstMatch.frame.width, height: field.maxY + 16 - top))
+        }
+        return frames
+    }
+
+    /// Off screen, or cut by a bar it is not part of (a bar's own buttons lie inside it).
+    static func isCovered(_ frame: CGRect, screen: CGRect, by covers: [CGRect]) -> Bool {
+        guard !frame.isEmpty else { return false }
+        if !screen.isEmpty, !screen.contains(frame) { return true }
+        return covers.contains { $0.intersects(frame) && !$0.contains(frame) }
     }
 
     /// Known audit issue kinds per screen ("<variant> <screen>").
