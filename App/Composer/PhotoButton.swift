@@ -15,6 +15,8 @@ struct PhotoButton: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showsPhotos = false
     @State private var showsCamera = false
+    /// At least the 44 pt touch target; grows with the text size.
+    @ScaledMetric(relativeTo: .title3) private var size: CGFloat = 44
 
     var body: some View {
         Menu {
@@ -44,7 +46,7 @@ struct PhotoButton: View {
                         .font(.title3)
                 }
             }
-            .frame(width: 36, height: 36)
+            .frame(width: size, height: size)
         }
         .disabled(isDisabled || isPreparing)
         .accessibilityLabel("Add a photo")

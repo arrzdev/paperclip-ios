@@ -46,13 +46,14 @@ struct NewTaskSheet: View {
                 .padding()
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                HStack(spacing: 8) {
-                    PhotoButton(isDisabled: model.isBusy, isPreparing: $isPreparing, notice: $notice) {
-                        model.attach($0)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        chips
+                        Spacer(minLength: 0)
                     }
-                    AssigneeChip(model: model)
-                    ProjectChip(model: model)
-                    Spacer(minLength: 0)
+                    VStack(alignment: .leading, spacing: 8) {
+                        chips
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -79,6 +80,15 @@ struct NewTaskSheet: View {
                 await model.load()
             }
         }
+    }
+
+    @ViewBuilder
+    private var chips: some View {
+        PhotoButton(isDisabled: model.isBusy, isPreparing: $isPreparing, notice: $notice) {
+            model.attach($0)
+        }
+        AssigneeChip(model: model)
+        ProjectChip(model: model)
     }
 }
 
@@ -148,10 +158,12 @@ private struct ChipLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: systemImage)
+                .accessibilityHidden(true)
             Text(title)
-                .lineLimit(1)
+                .lineLimit(2)
             Image(systemName: "chevron.down")
                 .font(.caption2.weight(.semibold))
+                .accessibilityHidden(true)
         }
         .font(.subheadline)
         .padding(.horizontal, 10)
@@ -220,18 +232,28 @@ extension View {
     func newTaskButton(_ action: (() -> Void)?) -> some View {
         overlay(alignment: .bottomTrailing) {
             if let action {
-                Button(action: action) {
-                    Image(systemName: "plus")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 56, height: 56)
-                        .background(.tint, in: .circle)
-                        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
-                }
-                .padding(.trailing, 20)
-                .padding(.bottom, 16)
-                .accessibilityLabel("New task")
+                NewTaskFloatingButton(action: action)
             }
         }
+    }
+}
+
+/// The floating **+**, bottom right in thumb reach; it grows with the text size.
+private struct NewTaskFloatingButton: View {
+    let action: () -> Void
+    @ScaledMetric(relativeTo: .title2) private var size: CGFloat = 56
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(.tint, in: .circle)
+                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+        }
+        .padding(.trailing, 20)
+        .padding(.bottom, 16)
+        .accessibilityLabel("New task")
     }
 }

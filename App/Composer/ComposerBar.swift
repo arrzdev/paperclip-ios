@@ -75,7 +75,6 @@ struct SendBubble: View {
                 Image(systemName: "exclamationmark.circle.fill")
                     .foregroundStyle(.red)
                 Text(message)
-                    .lineLimit(2)
                 Spacer(minLength: 8)
                 Button("Retry", action: onRetry)
                 .buttonStyle(.bordered)
@@ -97,6 +96,7 @@ struct PendingThumbnail: View {
     let canRemove: Bool
     let onRemove: () -> Void
     @State private var thumbnail: UIImage?
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 64
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -109,7 +109,7 @@ struct PendingThumbnail: View {
                     Rectangle().fill(.quaternary)
                 }
             }
-            .frame(width: 64, height: 64)
+            .frame(width: size, height: size)
             .clipShape(.rect(cornerRadius: 8))
             .accessibilityLabel("Photo to send")
 

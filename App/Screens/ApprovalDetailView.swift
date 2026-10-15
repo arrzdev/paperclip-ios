@@ -93,7 +93,7 @@ struct ApprovalDetailView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if !model.availableDecisions.isEmpty {
-                HStack(spacing: 8) {
+                ButtonRow {
                     ForEach(model.availableDecisions, id: \.self) { option in
                         decisionButton(option)
                     }
@@ -138,8 +138,6 @@ struct ApprovalDetailView: View {
             decision = option
         } label: {
             Text(option.title)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
         }
         switch option {
@@ -193,10 +191,10 @@ private struct ApprovalCommentRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveRow {
                 Text(author)
                     .font(.subheadline.weight(.semibold))
-                Spacer()
+            } trailing: {
                 Text(comment.createdAt, format: .relative(presentation: .named))
                     .font(.caption)
                     .foregroundStyle(.secondary)

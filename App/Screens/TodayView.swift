@@ -97,7 +97,6 @@ struct TodayView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
-                        .lineLimit(2)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .transition(.opacity)
@@ -185,11 +184,11 @@ private struct NeedsYouCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveRow {
                 Label(card.kind.title, systemImage: card.kind.systemImage)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tint)
-                Spacer()
+            } trailing: {
                 if let identifier = card.identifier {
                     Text(identifier)
                         .font(.caption.monospaced())
@@ -205,7 +204,7 @@ private struct NeedsYouCardView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
             }
-            HStack(spacing: 8) {
+            ButtonRow {
                 if let request = card.request {
                     RequestButtons(card: request, actions: actions, onSheet: onSheet) { onOpen(request.webPath) }
                 }
@@ -234,11 +233,11 @@ private struct ReplyRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveRow {
                 Text(row.issue.identifier ?? "")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
-                Spacer()
+            } trailing: {
                 Text(row.issue.lastExternalCommentAt ?? row.issue.updatedAt, format: .relative(presentation: .named))
                     .font(.caption)
                     .foregroundStyle(.secondary)

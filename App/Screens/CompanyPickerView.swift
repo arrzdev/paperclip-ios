@@ -31,11 +31,14 @@ struct CompanyPickerView: View {
                         if company.id == model.selectedCompanyId {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.tint)
+                                .accessibilityHidden(true)
                         }
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(company.id == model.selectedCompanyId ? .isSelected : [])
             }
             if let selectError {
                 Text(selectError)
