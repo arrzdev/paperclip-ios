@@ -108,7 +108,7 @@ struct RequestActionsTests {
 
         #expect(cards(model).compactMap(\.request).map(\.id) == ["att-1-subject", "att-5-subject"])
         #expect(server.requests("GET", interactionsPath).count == 1)
-        guard case .answer(let questions) = cards(model)[1].request?.action else {
+        guard case .answer(let questions) = try #require(cards(model).dropFirst().first).request?.action else {
             Testing.Issue.record("expected an Answer card")
             return
         }
@@ -238,6 +238,7 @@ struct RequestActionsTests {
         let (model, _, _) = try await today(server)
         let requests = cards(model).compactMap(\.request)
 
+        try #require(requests.count == 2)
         await model.requests.accept(requests[0])
         await model.requests.accept(requests[1])
 
@@ -394,7 +395,7 @@ struct RequestActionsTests {
         await model.refresh()
 
         #expect(model.threadItems.map(\.id) == ["c-1", "att-1-subject", "c-2"])
-        guard case .request(let card) = model.threadItems[1] else {
+        guard case .request(let card) = try #require(model.threadItems.dropFirst().first) else {
             Testing.Issue.record("expected a request in the thread")
             return
         }
@@ -407,7 +408,7 @@ struct RequestActionsTests {
         let (store, id) = try signedInStore(server)
         let model = TaskDetailModel(store: store, accountID: id, issueID: "issue-1")
         await model.refresh()
-        guard case .request(let card) = model.threadItems[1] else {
+        guard case .request(let card) = try #require(model.threadItems.dropFirst().first) else {
             Testing.Issue.record("expected a request in the thread")
             return
         }
@@ -444,7 +445,7 @@ struct RequestActionsTests {
         let (store, id) = try signedInStore(server)
         let model = TaskDetailModel(store: store, accountID: id, issueID: "issue-1")
         await model.refresh()
-        guard case .request(let card) = model.threadItems[1] else {
+        guard case .request(let card) = try #require(model.threadItems.dropFirst().first) else {
             Testing.Issue.record("expected a request in the thread")
             return
         }
