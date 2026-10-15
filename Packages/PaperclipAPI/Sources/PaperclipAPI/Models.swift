@@ -500,3 +500,409 @@ public struct Dashboard: Decodable, Equatable, Sendable {
     public let tasks: Tasks
     public let pendingApprovals: Int?
 }
+
+// MARK: - Requests (issue thread interactions)
+
+public enum InteractionKind: Codable, Hashable, Sendable {
+    case suggestTasks, askUserQuestions, requestConfirmation, requestCheckboxConfirmation
+    case requestItemVerdicts, connectionIntent
+    case unknown(String)
+
+    private static let known: [(InteractionKind, String)] = [
+        (.suggestTasks, "suggest_tasks"),
+        (.askUserQuestions, "ask_user_questions"),
+        (.requestConfirmation, "request_confirmation"),
+        (.requestCheckboxConfirmation, "request_checkbox_confirmation"),
+        (.requestItemVerdicts, "request_item_verdicts"),
+        (.connectionIntent, "connection_intent"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public enum InteractionStatus: Codable, Hashable, Sendable {
+    case pending, accepted, rejected, answered, cancelled, expired, failed
+    case unknown(String)
+
+    private static let known: [(InteractionStatus, String)] = [
+        (.pending, "pending"),
+        (.accepted, "accepted"),
+        (.rejected, "rejected"),
+        (.answered, "answered"),
+        (.cancelled, "cancelled"),
+        (.expired, "expired"),
+        (.failed, "failed"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public enum QuestionSelectionMode: Codable, Hashable, Sendable {
+    case single, multi
+    case unknown(String)
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "single": self = .single
+        case "multi": self = .multi
+        default: self = .unknown(rawValue)
+        }
+    }
+
+    public var rawValue: String {
+        switch self {
+        case .single: "single"
+        case .multi: "multi"
+        case .unknown(let value): value
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public struct QuestionOption: Decodable, Equatable, Sendable {
+    public let id: String
+    public let label: String
+    public let description: String?
+    /// The option is a text field; its text goes back as `otherText`.
+    public let freeText: Bool?
+}
+
+/// One question of an `ask_user_questions` request.
+public struct InteractionQuestion: Decodable, Equatable, Sendable {
+    public let id: String
+    public let prompt: String
+    public let helpText: String?
+    public let selectionMode: QuestionSelectionMode
+    public let required: Bool?
+    public let allowOther: Bool?
+    public let options: [QuestionOption]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, prompt, helpText, selectionMode, required, allowOther, options
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        prompt = try container.decode(String.self, forKey: .prompt)
+        helpText = try? container.decodeIfPresent(String.self, forKey: .helpText)
+        selectionMode = try container.decode(QuestionSelectionMode.self, forKey: .selectionMode)
+        required = try? container.decodeIfPresent(Bool.self, forKey: .required)
+        allowOther = try? container.decodeIfPresent(Bool.self, forKey: .allowOther)
+        options = try container.decodeIfPresent([QuestionOption].self, forKey: .options) ?? []
+    }
+}
+
+/// The fields of an interaction's `payload` the app uses. Each is decoded on
+/// its own and is nil when missing or of another type, so a payload of a kind
+/// this client does not know never fails the list.
+public struct InteractionPayload: Decodable, Equatable, Sendable {
+    public let title: String?
+    public let prompt: String?
+    public let detailsMarkdown: String?
+    public let acceptLabel: String?
+    public let rejectLabel: String?
+    public let rejectRequiresReason: Bool?
+    public let submitLabel: String?
+    public let questions: [InteractionQuestion]?
+    /// The confirmation runs a tool when accepted.
+    public let hasToolAction: Bool
+    /// The confirmation shares a secret when accepted.
+    public let hasSecretProposal: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case title, prompt, detailsMarkdown, acceptLabel, rejectLabel, rejectRequiresReason, submitLabel
+        case questions, toolAction, secretProposal
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        func text(_ key: CodingKeys) -> String? {
+            (try? container?.decodeIfPresent(String.self, forKey: key)) ?? nil
+        }
+        func present(_ key: CodingKeys) -> Bool {
+            guard let container, container.contains(key) else { return false }
+            return (try? container.decodeNil(forKey: key)) == false
+        }
+        title = text(.title)
+        prompt = text(.prompt)
+        detailsMarkdown = text(.detailsMarkdown)
+        acceptLabel = text(.acceptLabel)
+        rejectLabel = text(.rejectLabel)
+        submitLabel = text(.submitLabel)
+        rejectRequiresReason = (try? container?.decodeIfPresent(Bool.self, forKey: .rejectRequiresReason)) ?? nil
+        questions = (try? container?.decodeIfPresent([InteractionQuestion].self, forKey: .questions)) ?? nil
+        hasToolAction = present(.toolAction)
+        hasSecretProposal = present(.secretProposal)
+    }
+}
+
+/// A request an agent left on a task (`GET /api/issues/:id/interactions`).
+public struct IssueInteraction: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let issueId: String
+    public let kind: InteractionKind
+    public let status: InteractionStatus
+    public let title: String?
+    public let summary: String?
+    public let createdByAgentId: String?
+    public let createdByUserId: String?
+    public let payload: InteractionPayload
+    public let createdAt: Date
+    public let updatedAt: Date?
+    public let resolvedAt: Date?
+}
+
+/// One answer of `POST /api/issues/:id/interactions/:iid/respond`.
+public struct InteractionAnswer: Encodable, Equatable, Sendable {
+    public let questionId: String
+    public let optionIds: [String]
+    /// Not sent when nil.
+    public let otherText: String?
+
+    public init(questionId: String, optionIds: [String], otherText: String? = nil) {
+        self.questionId = questionId
+        self.optionIds = optionIds
+        self.otherText = otherText
+    }
+}
+
+// MARK: - Approvals
+
+public enum ApprovalType: Codable, Hashable, Sendable {
+    case hireAgent, approveCeoStrategy, budgetOverrideRequired, requestBoardApproval
+    case unknown(String)
+
+    private static let known: [(ApprovalType, String)] = [
+        (.hireAgent, "hire_agent"),
+        (.approveCeoStrategy, "approve_ceo_strategy"),
+        (.budgetOverrideRequired, "budget_override_required"),
+        (.requestBoardApproval, "request_board_approval"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public enum ApprovalStatus: Codable, Hashable, Sendable {
+    case pending, revisionRequested, approved, rejected, cancelled
+    case unknown(String)
+
+    private static let known: [(ApprovalStatus, String)] = [
+        (.pending, "pending"),
+        (.revisionRequested, "revision_requested"),
+        (.approved, "approved"),
+        (.rejected, "rejected"),
+        (.cancelled, "cancelled"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+/// Any JSON value, for free-form payloads.
+public enum JSONValue: Decodable, Equatable, Sendable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case array([JSONValue])
+    case object([String: JSONValue])
+    case null
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else {
+            self = .object(try container.decode([String: JSONValue].self))
+        }
+    }
+
+    /// The value at `key` of an object; nil for a missing key or a non-object.
+    public subscript(key: String) -> JSONValue? {
+        if case .object(let object) = self { return object[key] }
+        return nil
+    }
+}
+
+/// A line of an approval's payload summary.
+public struct ApprovalField: Equatable, Sendable {
+    public let label: String
+    public let value: String
+
+    public init(label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+}
+
+public struct Approval: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let companyId: String
+    public let type: ApprovalType
+    public let status: ApprovalStatus
+    public let requestedByAgentId: String?
+    public let requestedByUserId: String?
+    public let payload: JSONValue
+    public let decisionNote: String?
+    public let decidedAt: Date?
+    public let createdAt: Date
+    public let updatedAt: Date
+
+    /// The server's own rule: `title ?? summary ?? recommendedAction`, else the type.
+    public var title: String {
+        for key in ["title", "summary", "recommendedAction"] {
+            if case .string(let text)? = payload[key], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return text
+            }
+        }
+        return type.rawValue.replacingOccurrences(of: "_", with: " ")
+    }
+
+    /// The simple top-level payload fields, sorted by key. Objects, nulls and
+    /// empty values are left out; lists of simple values are joined.
+    public var summaryFields: [ApprovalField] {
+        guard case .object(let object) = payload else { return [] }
+        return object.keys.sorted().compactMap { key in
+            guard let value = object[key].flatMap(Self.text) else { return nil }
+            return ApprovalField(label: Self.label(key), value: value)
+        }
+    }
+
+    private static func text(_ value: JSONValue) -> String? {
+        switch value {
+        case .string(let text):
+            return text.isEmpty ? nil : text
+        case .number(let number):
+            if number == number.rounded(), abs(number) < 1e15 { return String(Int64(number)) }
+            return String(number)
+        case .bool(let flag):
+            return flag ? "Yes" : "No"
+        case .array(let items):
+            let texts = items.map { item -> String? in
+                if case .array = item { return nil }
+                return text(item)
+            }
+            guard !texts.isEmpty, !texts.contains(where: { $0 == nil }) else { return nil }
+            return texts.compactMap { $0 }.joined(separator: ", ")
+        case .object, .null:
+            return nil
+        }
+    }
+
+    /// `budgetMonthlyCents` → "Budget monthly cents", `reports_to` → "Reports to".
+    private static func label(_ key: String) -> String {
+        var words = ""
+        for character in key {
+            if character == "_" {
+                words.append(" ")
+            } else if character.isUppercase {
+                words.append(" ")
+                words.append(contentsOf: character.lowercased())
+            } else {
+                words.append(character)
+            }
+        }
+        let trimmed = words.trimmingCharacters(in: .whitespaces)
+        return trimmed.prefix(1).uppercased() + trimmed.dropFirst()
+    }
+}
+
+public struct ApprovalComment: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let approvalId: String?
+    public let authorAgentId: String?
+    public let authorUserId: String?
+    public let body: String
+    public let createdAt: Date
+}
+
+public enum ApprovalDecision: Hashable, Sendable, CaseIterable {
+    case approve, reject, requestRevision
+
+    var pathComponent: String {
+        switch self {
+        case .approve: "approve"
+        case .reject: "reject"
+        case .requestRevision: "request-revision"
+        }
+    }
+}
