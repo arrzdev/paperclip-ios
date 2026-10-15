@@ -38,6 +38,7 @@ Agents work on a Linux VM. There is no Xcode, no Swift toolchain and no simulato
 App/                      SwiftUI app target (screens, view models, app wiring)
 Packages/PaperclipAPI/    local SwiftPM package: API client + models (Foundation only)
 Tests/                    app unit tests (PaperclipIOSTests)
+UITests/                  XCUITest screen tour (PaperclipIOSUITests)
 project.yml               XcodeGen spec (source of truth for the project)
 .github/workflows/ci.yml  build, test, unsigned .ipa
 ```
@@ -215,6 +216,14 @@ own with `swift test`. Keychain, UI and app state live in the app target.
 - Keychain and account-store code sits behind a protocol; tests use an in-memory fake.
 - UI: view models are tested as plain types. UI tests (XCUITest) only for the main flows, added
   when a flow exists.
+- UI-test mode (Debug only): the launch argument `-uiTestFixtures` signs in one fake account on
+  `paperclip.test` and answers every request from the package fixtures (`FixtureMode`,
+  `FixtureRoutes`; bundled as `Fixtures/`, excluded from Release). `-uiTestDark` forces dark mode.
+  A screen that calls a new endpoint needs a route there. `ScreenTourUITests` walks Today, Inbox,
+  Tasks, Me → Accounts and Me → More at default size, AX5 and dark, keeps a screenshot of each
+  screen and runs `performAccessibilityAudit()` (issues inside the system tab and navigation bars
+  are listed, not counted). CI job `ui-test` uploads `Paperclip-ui-screenshots` (screenshots,
+  audit text, test summary) and `Paperclip-ui-xcresult`.
 
 ## Branches, PRs and CI
 
