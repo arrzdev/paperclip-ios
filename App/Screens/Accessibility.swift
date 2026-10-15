@@ -115,3 +115,24 @@ struct SectionTitle: View {
         }
     }
 }
+
+/// The title of a searchable list (Inbox, Tasks): large, but inline from the
+/// accessibility text sizes up. There a list pulled down carries the large
+/// title over the search field and the two texts are drawn on each other.
+struct SearchableListTitle: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    static func isInline(at typeSize: DynamicTypeSize) -> Bool {
+        typeSize.isAccessibilitySize
+    }
+
+    func body(content: Content) -> some View {
+        content.navigationBarTitleDisplayMode(Self.isInline(at: typeSize) ? .inline : .automatic)
+    }
+}
+
+extension View {
+    func searchableListTitle(_ title: String) -> some View {
+        navigationTitle(title).modifier(SearchableListTitle())
+    }
+}
