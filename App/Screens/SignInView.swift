@@ -100,7 +100,7 @@ private struct ProgressRow: View {
         HStack(spacing: 12) {
             ProgressView()
             Text(text)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
         }
     }
 }

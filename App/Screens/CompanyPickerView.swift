@@ -24,7 +24,7 @@ struct CompanyPickerView: View {
                             if let prefix = company.issuePrefix {
                                 Text(prefix)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                             }
                         }
                         Spacer()

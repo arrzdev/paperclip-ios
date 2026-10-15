@@ -8,7 +8,12 @@ import XCTest
 /// `AccessibilityBaseline.json` lists its kind for that screen (the kinds
 /// already known there; the audit's exact findings vary between runs, so it
 /// holds kinds, not counts). Fixing a kind on a screen removes it there; a new
-/// kind on a screen fails.
+/// kind on a screen fails. Dynamic Type support does not depend on the
+/// variant and the audit reports it unevenly between them, so that kind,
+/// known for a screen in one variant, is known in all of them. An element
+/// partly under the tab bar, the navigation bar or Today's message bar (or
+/// off screen) is judged against the bar's glass, not its own background: its
+/// issues are listed as "covered" and do not count.
 @MainActor
 final class ScreenTourUITests: XCTestCase {
     func testDefaultSize() {
@@ -79,14 +84,16 @@ final class ScreenTourUITests: XCTestCase {
         let button = app.tabBars.buttons[title]
         XCTAssertTrue(button.waitForExistence(timeout: 10), "No \(title) tab")
         button.tap()
+        // Audit the new tab, not the last frames of the old one.
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10), "\(title) did not open")
     }
 
-    /// Taps the row labelled `title` (scrolling down to it) and waits for its screen.
+    /// Taps the row labelled `title` (scrolling down, then back up, to it) and waits for its screen.
     private func open(_ title: String, in app: XCUIApplication) -> Bool {
         let row = app.buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
         var swipes = 0
-        while !(row.exists && row.isHittable), swipes < 12 {
-            app.swipeUp()
+        while !(row.exists && row.isHittable), swipes < 24 {
+            if swipes < 12 { app.swipeUp() } else { app.swipeDown() }
             swipes += 1
         }
         guard row.exists, row.isHittable else {
@@ -126,14 +133,23 @@ final class ScreenTourUITests: XCTestCase {
     /// Runs the accessibility audit; every issue goes into a text attachment.
     /// A timed-out audit is retried once.
     private func audit(_ app: XCUIApplication, screen: String) {
-        let known = Set(Self.baseline[screen] ?? [])
+        let known = Self.knownKinds(for: screen)
         var lines: [String] = []
         for attempt in 1...2 {
             lines = []
             do {
+                let covers = coveringFrames(app)
+                let messageBar = messageBarFrame(app)
+                let barLabels = barElementLabels(app)
+                let screenFrame = app.windows.firstMatch.frame
                 try app.performAccessibilityAudit { issue in
                     let kind = issue.compactDescription
                     let label = issue.element.map { "'\($0.label)'" } ?? "no element"
+                    if let element = issue.element, !barLabels.contains(element.label),
+                       Self.isCovered(element.frame, screen: screenFrame, by: covers, keeping: messageBar) {
+                        lines.append("covered: \(kind) — \(label)")
+                        return true
+                    }
                     let isKnown = known.contains(kind)
                     lines.append("\(isKnown ? "known" : "NEW"): \(kind) — \(label)")
                     return isKnown
@@ -151,6 +167,82 @@ final class ScreenTourUITests: XCTestCase {
         attachment.name = "\(screen) audit"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// How far the tab bar's scroll-edge blur reaches into the content
+    /// (less than the 16 pt gap above it of the floating +).
+    static let edgeEffect: CGFloat = 8
+
+    /// The bars content scrolls under: the tab bar with its edge blur, the
+    /// navigation bar, and Today's message bar.
+    private func coveringFrames(_ app: XCUIApplication) -> [CGRect] {
+        var frames: [CGRect] = []
+        let tabBar = app.tabBars.firstMatch
+        if tabBar.exists {
+            frames.append(tabBar.frame.insetBy(dx: 0, dy: -Self.edgeEffect))
+        }
+        let navigationBar = app.navigationBars.firstMatch
+        if navigationBar.exists {
+            frames.append(navigationBar.frame)
+        }
+        if let messageBar = messageBarFrame(app) {
+            frames.append(messageBar)
+        }
+        return frames
+    }
+
+    /// Today's message bar, from just above its text field down; nil elsewhere.
+    private func messageBarFrame(_ app: XCUIApplication) -> CGRect? {
+        let message = app.textFields.matching(NSPredicate(format: "placeholderValue BEGINSWITH %@", "Message")).firstMatch
+        guard message.exists else { return nil }
+        let field = message.frame
+        let top = field.minY - 16
+        return CGRect(x: 0, y: top, width: app.windows.firstMatch.frame.width, height: field.maxY + 16 - top)
+    }
+
+    /// Labels (and placeholders) of the navigation and tab bars' own
+    /// elements: title, buttons, search field, tabs. Those are judged, never
+    /// counted as covered.
+    private func barElementLabels(_ app: XCUIApplication) -> Set<String> {
+        var labels: Set<String> = []
+        for bar in [app.tabBars.firstMatch, app.navigationBars.firstMatch] where bar.exists {
+            for element in bar.descendants(matching: .any).allElementsBoundByIndex {
+                if !element.label.isEmpty { labels.insert(element.label) }
+                if let placeholder = element.placeholderValue, !placeholder.isEmpty { labels.insert(placeholder) }
+            }
+        }
+        return labels
+    }
+
+    /// Off screen, or under a bar (or its edge blur), even in part. The
+    /// navigation and tab bars' own elements are left out by the caller;
+    /// anything inside the message bar is its own and is judged.
+    static func isCovered(_ frame: CGRect, screen: CGRect, by covers: [CGRect], keeping messageBar: CGRect?) -> Bool {
+        guard !frame.isEmpty else { return false }
+        if let messageBar, messageBar.contains(frame) { return false }
+        if !screen.isEmpty, !screen.contains(frame) { return true }
+        return covers.contains { $0.intersects(frame) }
+    }
+
+    /// The audit's kind for text that does not follow the text size.
+    static let dynamicTypeKind = "Dynamic Type font sizes are partially unsupported"
+
+    /// The kinds known for `screen` ("<variant> <screen>"): its own, plus
+    /// the Dynamic Type kind when any variant of the same screen lists it.
+    static func knownKinds(for screen: String) -> Set<String> {
+        var known = Set(baseline[screen] ?? [])
+        let name = screenName(screen)
+        let dynamicTypeKnown = baseline.contains { key, kinds in
+            screenName(key) == name && kinds.contains(dynamicTypeKind)
+        }
+        if dynamicTypeKnown { known.insert(dynamicTypeKind) }
+        return known
+    }
+
+    /// "Me-Accounts" for "dark Me-Accounts".
+    static func screenName(_ screen: String) -> String {
+        guard let space = screen.firstIndex(of: " ") else { return screen }
+        return String(screen[screen.index(after: space)...])
     }
 
     /// Known audit issue kinds per screen ("<variant> <screen>").

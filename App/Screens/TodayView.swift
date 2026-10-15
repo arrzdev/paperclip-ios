@@ -95,7 +95,7 @@ struct TodayView: View {
                 if let pulse = model.pulse {
                     Text(pulse.text)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                         .monospacedDigit()
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
@@ -169,8 +169,8 @@ private struct SectionHeader: View {
             Text(title)
             Text("\(count)")
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
         }
+        .foregroundStyle(Color.secondaryText)
         .accessibilityElement(children: .combine)
     }
 }
@@ -192,7 +192,7 @@ private struct NeedsYouCardView: View {
                 if let identifier = card.identifier {
                     Text(identifier)
                         .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
             }
             Text(card.title)
@@ -201,7 +201,7 @@ private struct NeedsYouCardView: View {
             if let detail = card.detail, !detail.isEmpty {
                 Text(detail)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(3)
             }
             ButtonRow {
@@ -236,11 +236,11 @@ private struct ReplyRowView: View {
             AdaptiveRow {
                 Text(row.issue.identifier ?? "")
                     .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             } trailing: {
                 Text(row.issue.lastExternalCommentAt ?? row.issue.updatedAt, format: .relative(presentation: .named))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             Text(row.issue.title)
                 .font(.body.weight(.semibold))
@@ -248,7 +248,7 @@ private struct ReplyRowView: View {
             if let preview = row.preview {
                 Text(preview)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(1)
             }
         }

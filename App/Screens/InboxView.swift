@@ -204,18 +204,18 @@ private struct InboxRowView: View {
                 AdaptiveRow {
                     Text(row.issue.identifier ?? "")
                         .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 } trailing: {
                     Text(row.issue.lastActivityAt ?? row.issue.updatedAt, format: .relative(presentation: .named))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 Text(row.issue.title)
                     .font(row.isUnread ? .body.weight(.semibold) : .body)
                     .lineLimit(2)
                 Text(row.issue.status.label)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
         .padding(.vertical, 2)
