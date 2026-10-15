@@ -117,6 +117,12 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   back on error; an assignee change sends both `assigneeAgentId` and `assigneeUserId` (one null).
   Review bar only on `in_review` / `done`; Re-open needs a non-empty comment (`status todo` +
   `comment` in one `PATCH`).
+- Composer (`CommentComposer`): the draft (text + pending photo) is kept per account and task in a
+  `DraftStore` (files in Application Support, in-memory in tests) and survives leaving the screen.
+  A photo uploads first (`POST /companies/:cid/issues/:iid/attachments`, multipart field `file`),
+  then the comment sends with its `attachmentIds`. A failure keeps the draft and offers Retry;
+  Retry does not upload the same photo twice and reuses the comment's `clientRequestId`, so the
+  server never posts it twice. Never log the draft text or image bytes.
 - Today: "Needs you" = attention items of kind interaction, approval and review
   (`GET /companies/:id/attention`) plus my open tasks; "New replies" = unread threads
   (`unreadForUserId=me`), at most 10, preview = first line of the newest comment not written by

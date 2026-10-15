@@ -111,6 +111,34 @@ public extension APIClient {
         try await request(.get, "/attachments/\(segment(id))/content", accept: "*/*")
     }
 
+    /// Multipart upload, field `file`. `progress` gets the sent fraction (0…1).
+    func uploadAttachment(
+        companyId: String,
+        issueId: String,
+        _ file: AttachmentUpload,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> Attachment {
+        let boundary = "paperclip-" + UUID().uuidString
+        var data = Data()
+        data.append(Data((
+            "--\(boundary)\r\n"
+            + "Content-Disposition: form-data; name=\"file\"; filename=\"\(quoted(file.filename))\"\r\n"
+            + "Content-Type: \(file.contentType)\r\n\r\n"
+        ).utf8))
+        data.append(file.data)
+        data.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        let body = try await request(
+            .post, "/companies/\(segment(companyId))/issues/\(segment(issueId))/attachments",
+            rawBody: RawBody(data: data, contentType: "multipart/form-data; boundary=\(boundary)"),
+            delegate: progress.map { UploadProgress($0) as any URLSessionTaskDelegate }
+        )
+        do {
+            return try PaperclipDate.decoder.decode(Attachment.self, from: body)
+        } catch {
+            throw APIError.decoding("POST attachments: \(error)")
+        }
+    }
+
     // MARK: Agents
 
     func agents(companyId: String) async throws -> [Agent] {
@@ -133,5 +161,30 @@ public extension APIClient {
 
     func unarchiveFromInbox(issueId: String) async throws {
         _ = try await request(.delete, "/issues/\(segment(issueId))/inbox-archive")
+    }
+}
+
+/// A file name safe inside a quoted multipart header.
+private func quoted(_ name: String) -> String {
+    name.replacingOccurrences(of: "\\", with: "_")
+        .replacingOccurrences(of: "\"", with: "_")
+        .replacingOccurrences(of: "\r", with: "_")
+        .replacingOccurrences(of: "\n", with: "_")
+}
+
+/// Reports upload progress of one request.
+private final class UploadProgress: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let report: @Sendable (Double) -> Void
+
+    init(_ report: @escaping @Sendable (Double) -> Void) {
+        self.report = report
+    }
+
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64, totalBytesExpectedToSend: Int64
+    ) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        report(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
     }
 }

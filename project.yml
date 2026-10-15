@@ -24,6 +24,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_CFBundleDisplayName: Paperclip
+        INFOPLIST_KEY_NSCameraUsageDescription: "Take a photo to add to a comment."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach your latest screenshot to a comment."
   PaperclipIOSTests:
     type: bundle.unit-test
     platform: iOS
