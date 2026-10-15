@@ -49,6 +49,7 @@ struct TasksView: View {
             await model.refresh()
         }
         .navigationTitle(AppTab.tasks.title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private struct Filters: Equatable {
