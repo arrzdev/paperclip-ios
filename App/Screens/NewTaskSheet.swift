@@ -233,13 +233,17 @@ extension View {
         overlay(alignment: .bottomTrailing) {
             if let action {
                 NewTaskFloatingButton(action: action)
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 16)
             }
         }
     }
 }
 
-/// The floating **+**, bottom right in thumb reach; it grows with the text size.
-private struct NewTaskFloatingButton: View {
+/// The **+** that opens the New task sheet: floating bottom right in thumb
+/// reach (`newTaskButton`), or beside the Today message bar. It grows with the
+/// text size.
+struct NewTaskFloatingButton: View {
     let action: () -> Void
     @ScaledMetric(relativeTo: .title2) private var size: CGFloat = 56
 
@@ -252,8 +256,6 @@ private struct NewTaskFloatingButton: View {
                 .background(.tint, in: .circle)
                 .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
         }
-        .padding(.trailing, 20)
-        .padding(.bottom, 16)
         .accessibilityLabel("New task")
     }
 }
