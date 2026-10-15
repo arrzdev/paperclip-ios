@@ -203,6 +203,10 @@ private struct NeedsYouCardView: View {
                     NavigationLink("Open", value: route)
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                } else if let route = card.approvalRoute {
+                    NavigationLink("Open", value: route)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                 } else if card.webPath != nil {
                     Button("Open") { onOpen(card.webPath) }
                         .buttonStyle(.bordered)

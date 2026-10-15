@@ -185,6 +185,32 @@ public extension APIClient {
         try await send(.post, interactionPath(issueId, interactionId, "respond"), body: RespondBody(answers: answers))
     }
 
+    // MARK: Approvals
+
+    /// The server does not sort this list.
+    func approvals(companyId: String, status: ApprovalStatus? = nil) async throws -> [Approval] {
+        let query = status.map { [URLQueryItem(name: "status", value: $0.rawValue)] } ?? []
+        return try await send(.get, "/companies/\(segment(companyId))/approvals", query: query)
+    }
+
+    func approval(id: String) async throws -> Approval {
+        try await send(.get, "/approvals/\(segment(id))")
+    }
+
+    /// Oldest first.
+    func approvalComments(approvalId: String) async throws -> [ApprovalComment] {
+        try await send(.get, "/approvals/\(segment(approvalId))/comments")
+    }
+
+    func addApprovalComment(approvalId: String, body: String) async throws -> ApprovalComment {
+        try await send(.post, "/approvals/\(segment(approvalId))/comments", body: CommentBody(body: body))
+    }
+
+    /// `note` goes as `decisionNote`; not sent when nil. The server records who decided.
+    func decideApproval(id: String, _ decision: ApprovalDecision, note: String?) async throws -> Approval {
+        try await send(.post, "/approvals/\(segment(id))/\(decision.pathComponent)", body: DecisionBody(decisionNote: note))
+    }
+
     private func interactionPath(_ issueId: String, _ interactionId: String, _ action: String) -> String {
         "/issues/\(segment(issueId))/interactions/\(segment(interactionId))/\(action)"
     }
@@ -198,6 +224,14 @@ private struct RejectBody: Encodable {
 
 private struct RespondBody: Encodable {
     let answers: [InteractionAnswer]
+}
+
+private struct CommentBody: Encodable {
+    let body: String
+}
+
+private struct DecisionBody: Encodable {
+    let decisionNote: String?
 }
 
 /// A file name safe inside a quoted multipart header.

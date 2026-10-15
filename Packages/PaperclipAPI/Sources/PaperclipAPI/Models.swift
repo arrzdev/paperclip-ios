@@ -706,3 +706,203 @@ public struct InteractionAnswer: Encodable, Equatable, Sendable {
         self.otherText = otherText
     }
 }
+
+// MARK: - Approvals
+
+public enum ApprovalType: Codable, Hashable, Sendable {
+    case hireAgent, approveCeoStrategy, budgetOverrideRequired, requestBoardApproval
+    case unknown(String)
+
+    private static let known: [(ApprovalType, String)] = [
+        (.hireAgent, "hire_agent"),
+        (.approveCeoStrategy, "approve_ceo_strategy"),
+        (.budgetOverrideRequired, "budget_override_required"),
+        (.requestBoardApproval, "request_board_approval"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public enum ApprovalStatus: Codable, Hashable, Sendable {
+    case pending, revisionRequested, approved, rejected, cancelled
+    case unknown(String)
+
+    private static let known: [(ApprovalStatus, String)] = [
+        (.pending, "pending"),
+        (.revisionRequested, "revision_requested"),
+        (.approved, "approved"),
+        (.rejected, "rejected"),
+        (.cancelled, "cancelled"),
+    ]
+
+    public init(rawValue: String) {
+        self = Self.known.first { $0.1 == rawValue }?.0 ?? .unknown(rawValue)
+    }
+
+    public var rawValue: String {
+        if case .unknown(let value) = self { return value }
+        return Self.known.first { $0.0 == self }!.1
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+/// Any JSON value, for free-form payloads.
+public enum JSONValue: Decodable, Equatable, Sendable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case array([JSONValue])
+    case object([String: JSONValue])
+    case null
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else {
+            self = .object(try container.decode([String: JSONValue].self))
+        }
+    }
+
+    /// The value at `key` of an object; nil for a missing key or a non-object.
+    public subscript(key: String) -> JSONValue? {
+        if case .object(let object) = self { return object[key] }
+        return nil
+    }
+}
+
+/// A line of an approval's payload summary.
+public struct ApprovalField: Equatable, Sendable {
+    public let label: String
+    public let value: String
+
+    public init(label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+}
+
+public struct Approval: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let companyId: String
+    public let type: ApprovalType
+    public let status: ApprovalStatus
+    public let requestedByAgentId: String?
+    public let requestedByUserId: String?
+    public let payload: JSONValue
+    public let decisionNote: String?
+    public let decidedAt: Date?
+    public let createdAt: Date
+    public let updatedAt: Date
+
+    /// The server's own rule: `title ?? summary ?? recommendedAction`, else the type.
+    public var title: String {
+        for key in ["title", "summary", "recommendedAction"] {
+            if case .string(let text)? = payload[key], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return text
+            }
+        }
+        return type.rawValue.replacingOccurrences(of: "_", with: " ")
+    }
+
+    /// The simple top-level payload fields, sorted by key. Objects, nulls and
+    /// empty values are left out; lists of simple values are joined.
+    public var summaryFields: [ApprovalField] {
+        guard case .object(let object) = payload else { return [] }
+        return object.keys.sorted().compactMap { key in
+            guard let value = object[key].flatMap(Self.text) else { return nil }
+            return ApprovalField(label: Self.label(key), value: value)
+        }
+    }
+
+    private static func text(_ value: JSONValue) -> String? {
+        switch value {
+        case .string(let text):
+            return text.isEmpty ? nil : text
+        case .number(let number):
+            if number == number.rounded(), abs(number) < 1e15 { return String(Int64(number)) }
+            return String(number)
+        case .bool(let flag):
+            return flag ? "Yes" : "No"
+        case .array(let items):
+            let texts = items.map { item -> String? in
+                if case .array = item { return nil }
+                return text(item)
+            }
+            guard !texts.isEmpty, !texts.contains(where: { $0 == nil }) else { return nil }
+            return texts.compactMap { $0 }.joined(separator: ", ")
+        case .object, .null:
+            return nil
+        }
+    }
+
+    /// `budgetMonthlyCents` → "Budget monthly cents", `reports_to` → "Reports to".
+    private static func label(_ key: String) -> String {
+        var words = ""
+        for character in key {
+            if character == "_" {
+                words.append(" ")
+            } else if character.isUppercase {
+                words.append(" ")
+                words.append(contentsOf: character.lowercased())
+            } else {
+                words.append(character)
+            }
+        }
+        let trimmed = words.trimmingCharacters(in: .whitespaces)
+        return trimmed.prefix(1).uppercased() + trimmed.dropFirst()
+    }
+}
+
+public struct ApprovalComment: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let approvalId: String?
+    public let authorAgentId: String?
+    public let authorUserId: String?
+    public let body: String
+    public let createdAt: Date
+}
+
+public enum ApprovalDecision: Hashable, Sendable, CaseIterable {
+    case approve, reject, requestRevision
+
+    var pathComponent: String {
+        switch self {
+        case .approve: "approve"
+        case .reject: "reject"
+        case .requestRevision: "request-revision"
+        }
+    }
+}

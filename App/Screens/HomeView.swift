@@ -16,6 +16,9 @@ struct HomeView: View {
                         .navigationDestination(for: TaskRoute.self) { route in
                             TaskDetailView(store: store, accountID: accountID, issueID: route.issueID)
                         }
+                        .navigationDestination(for: ApprovalRoute.self) { route in
+                            ApprovalDetailView(store: store, accountID: accountID, approvalID: route.approvalID)
+                        }
                 }
                 .tabItem { Label(tab.title, systemImage: tab.systemImage) }
                 .tag(tab)

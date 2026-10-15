@@ -580,4 +580,130 @@ struct APIClientTests {
             _ = try await client.acceptInteraction(issueId: "issue-1", interactionId: "i-1")
         }
     }
+
+    // MARK: - Approvals
+
+    @Test func pendingApprovalsDecodeTypesStatusesAndPayloads() async throws {
+        try stub("approvals")
+        let approvals = try await client.approvals(companyId: "company-1", status: .pending)
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.absoluteString == "https://paperclip.test/api/companies/company-1/approvals?status=pending")
+
+        #expect(approvals.count == 3)
+        let hire = approvals[0]
+        #expect(hire.id == "00000000-0000-4000-8000-0000000000e1")
+        #expect(hire.type == .hireAgent)
+        #expect(hire.status == .pending)
+        #expect(hire.requestedByAgentId == "agent-1")
+        #expect(hire.requestedByUserId == nil)
+        #expect(hire.createdAt == PaperclipDate.parse("2026-10-14T08:00:00.000Z"))
+        #expect(hire.payload["name"] == .string("Designer"))
+        #expect(hire.payload["budgetMonthlyCents"] == .number(5000))
+        #expect(hire.payload["desiredSkills"] == .array([.string("figma"), .string("copy")]))
+        #expect(hire.payload["metadata"] == .null)
+        #expect(hire.payload["missing"] == nil)
+
+        #expect(approvals[1].type == .requestBoardApproval)
+        #expect(approvals[1].requestedByUserId == "user-2")
+        // A newer server's types and statuses decode instead of failing the list.
+        #expect(approvals[2].type == .unknown("summon_dragon"))
+        #expect(approvals[2].status == .unknown("pondering"))
+    }
+
+    @Test func approvalsWithoutAStatusAskForAll() async throws {
+        StubURLProtocol.respond { _ in .init(body: Data("[]".utf8)) }
+        _ = try await client.approvals(companyId: "company-1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/companies/company-1/approvals")
+    }
+
+    @Test func approvalTitleFollowsTheServerRule() async throws {
+        try stub("approvals")
+        let approvals = try await client.approvals(companyId: "company-1", status: .pending)
+        // payload.title ?? summary ?? recommendedAction ?? type with spaces.
+        #expect(approvals[1].title == "Renew the domain")
+        #expect(approvals[0].title == "Product Designer")
+        #expect(approvals[0].payload["title"] == .string("Product Designer"))
+        #expect(approvals[2].title == "summon dragon")
+        let summaryOnly = #"{"id":"a-1","companyId":"company-1","type":"approve_ceo_strategy","status":"pending","payload":{"summary":"Focus on iOS"},"createdAt":"2026-10-14T08:00:00.000Z","updatedAt":"2026-10-14T08:00:00.000Z"}"#
+        #expect(try PaperclipDate.decoder.decode(Approval.self, from: Data(summaryOnly.utf8)).title == "Focus on iOS")
+        let empty = #"{"id":"a-2","companyId":"company-1","type":"approve_ceo_strategy","status":"pending","payload":{},"createdAt":"2026-10-14T08:00:00.000Z","updatedAt":"2026-10-14T08:00:00.000Z"}"#
+        #expect(try PaperclipDate.decoder.decode(Approval.self, from: Data(empty.utf8)).title == "approve ceo strategy")
+    }
+
+    @Test func approvalSummaryListsTheSimpleFieldsWithReadableLabels() async throws {
+        try stub("approval")
+        let approval = try await client.approval(id: "00000000-0000-4000-8000-0000000000e1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString
+            == "https://paperclip.test/api/approvals/00000000-0000-4000-8000-0000000000e1")
+
+        // Sorted by key; objects, nulls and empty values are left out; lists are joined.
+        #expect(approval.summaryFields == [
+            ApprovalField(label: "Adapter type", value: "claude_local"),
+            ApprovalField(label: "Budget monthly cents", value: "5000"),
+            ApprovalField(label: "Capabilities", value: "Wireframes and UI specs"),
+            ApprovalField(label: "Desired skills", value: "figma, copy"),
+            ApprovalField(label: "Icon", value: "pen"),
+            ApprovalField(label: "Name", value: "Designer"),
+            ApprovalField(label: "Reports to", value: "agent-1"),
+            ApprovalField(label: "Role", value: "designer"),
+            ApprovalField(label: "Title", value: "Product Designer"),
+        ])
+    }
+
+    @Test func approvalSummaryShowsYesNoAndDecimals() throws {
+        let json = #"{"id":"a-1","companyId":"company-1","type":"request_board_approval","status":"pending","requestedByAgentId":null,"requestedByUserId":null,"payload":{"urgent":true,"ratio":0.5,"blank":""},"decisionNote":null,"decidedAt":null,"createdAt":"2026-10-14T08:00:00.000Z","updatedAt":"2026-10-14T08:00:00.000Z"}"#
+        let approval = try PaperclipDate.decoder.decode(Approval.self, from: Data(json.utf8))
+        #expect(approval.summaryFields == [
+            ApprovalField(label: "Ratio", value: "0.5"),
+            ApprovalField(label: "Urgent", value: "Yes"),
+        ])
+    }
+
+    @Test func approvalCommentsAreOldestFirstAndANewOnePosts() async throws {
+        try stub("approval-comments")
+        let comments = try await client.approvalComments(approvalId: "a-1")
+        #expect(StubURLProtocol.lastRequest?.url?.absoluteString == "https://paperclip.test/api/approvals/a-1/comments")
+        #expect(comments.map(\.body) == ["We need a designer for the landing page.", "What is the budget?"])
+        #expect(comments[0].authorAgentId == "agent-1")
+        #expect(comments[1].authorUserId == "user-1")
+
+        try stub("approval-comment", status: 201)
+        let added = try await client.addApprovalComment(approvalId: "a-1", body: "Fine by me.")
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path == "/api/approvals/a-1/comments")
+        #expect(try jsonBody(request) as? [String: String] == ["body": "Fine by me."])
+        #expect(added.body == "Fine by me.")
+    }
+
+    @Test func decisionsPostToTheirRouteWithAnOptionalNote() async throws {
+        try stub("approval-approved")
+        let approved = try await client.decideApproval(id: "a-1", .approve, note: "Welcome aboard")
+        var request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path == "/api/approvals/a-1/approve")
+        #expect(try jsonBody(request) as? [String: String] == ["decisionNote": "Welcome aboard"])
+        #expect(approved.status == .approved)
+        #expect(approved.decisionNote == "Welcome aboard")
+        #expect(approved.decidedAt == PaperclipDate.parse("2026-10-14T10:00:00.000Z"))
+
+        _ = try await client.decideApproval(id: "a-1", .reject, note: nil)
+        request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.url?.path == "/api/approvals/a-1/reject")
+        #expect(try jsonBody(request).isEmpty)
+
+        _ = try await client.decideApproval(id: "a-1", .requestRevision, note: "Smaller budget")
+        request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.url?.path == "/api/approvals/a-1/request-revision")
+    }
+
+    @Test func aDecisionOnADecidedApprovalIsRejected() async throws {
+        StubURLProtocol.respond { _ in
+            .init(status: 422, body: Data(#"{"error":"Only pending approvals can request revision"}"#.utf8))
+        }
+        await #expect(throws: APIError.server(status: 422, body: "Only pending approvals can request revision")) {
+            _ = try await client.decideApproval(id: "a-1", .requestRevision, note: nil)
+        }
+    }
 }

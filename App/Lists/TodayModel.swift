@@ -1,8 +1,8 @@
 import Foundation
 import PaperclipAPI
 
-/// A "Needs you" card: a request, approval or review from the attention feed,
-/// or one of my open tasks.
+/// A "Needs you" card: a request or review from the attention feed, a pending
+/// approval, or one of my open tasks.
 struct NeedsYouCard: Equatable, Identifiable, Sendable {
     enum Kind: Equatable, Sendable {
         case interaction, approval, review, assignedTask
@@ -20,6 +20,8 @@ struct NeedsYouCard: Equatable, Identifiable, Sendable {
     /// The request behind an interaction card, with its buttons; nil when its
     /// fetch failed (the card only opens the task).
     var request: InteractionCard? = nil
+    /// The approval an approval card opens in Approval detail.
+    var approvalID: String? = nil
 }
 
 /// An unread thread with the first line of its newest reply not written by me.
@@ -241,8 +243,8 @@ final class TodayModel {
         return companyId
     }
 
-    /// Requests, approvals and reviews from the attention feed, then my open
-    /// tasks that no request card already points at.
+    /// Requests and reviews from the attention feed, then pending approvals
+    /// newest first, then my open tasks that no request card already points at.
     private func loadCards() async -> Result<[NeedsYouCard], Error> {
         do {
             let companyId = try companyID()
@@ -251,6 +253,7 @@ final class TodayModel {
             query.assigneeUserId = "me"
             query.status = Self.assignedStatuses
             let mine = try await store.call(accountID) { try await $0.issues(companyId: companyId, query: query) }
+            let pending = try await store.call(accountID) { try await $0.approvals(companyId: companyId, status: .pending) }
 
             let attention = try await withRequests(feed.items.compactMap(Self.card(for:)))
             let carded = Set(attention.compactMap(\.issueID))
@@ -260,7 +263,7 @@ final class TodayModel {
                     detail: issue.status.label, issueID: issue.id, webPath: webPath(identifier: issue.identifier)
                 )
             }
-            return .success(attention + tasks)
+            return .success(attention + Self.cards(for: pending) + tasks)
         } catch {
             return .failure(error)
         }
@@ -293,12 +296,25 @@ final class TodayModel {
         }
     }
 
+    /// "Approval: <title>" cards, newest first (the server does not sort).
+    private static func cards(for approvals: [Approval]) -> [NeedsYouCard] {
+        approvals
+            .sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt }
+            .map { approval in
+                NeedsYouCard(
+                    id: approval.id, kind: .approval, title: "Approval: \(approval.title)", identifier: nil,
+                    detail: nil, issueID: nil, webPath: nil, approvalID: approval.id
+                )
+            }
+    }
+
     /// Nil for attention kinds Today does not show (failed runs, budgets, …).
+    /// Approvals come from the approvals list, so their attention items are
+    /// left out too.
     private static func card(for item: AttentionItem) -> (card: NeedsYouCard, subjectID: String)? {
         let kind: NeedsYouCard.Kind
         switch item.sourceKind {
         case .issueThreadInteraction: kind = .interaction
-        case .approval: kind = .approval
         case .review: kind = .review
         default: return nil
         }
