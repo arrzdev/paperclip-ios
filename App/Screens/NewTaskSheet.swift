@@ -228,14 +228,51 @@ struct MessageBar: View {
 }
 
 extension View {
-    /// The floating **+** that opens the New task sheet; nothing when `action` is nil.
+    /// The **+** that opens the New task sheet on a list (Inbox, Tasks);
+    /// nothing when `action` is nil. See `NewTaskButtonPlacement`.
     func newTaskButton(_ action: (() -> Void)?) -> some View {
-        overlay(alignment: .bottomTrailing) {
-            if let action {
-                NewTaskFloatingButton(action: action)
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 16)
+        modifier(NewTaskButtonModifier(action: action))
+    }
+}
+
+/// Where a list puts its **+**: floating bottom right, or in the navigation
+/// bar from the accessibility text sizes up. There the floating **+** is
+/// about 100 pt wide and rows rest under it, half hidden.
+enum NewTaskButtonPlacement: Equatable {
+    case floating
+    case navigationBar
+
+    static func at(_ typeSize: DynamicTypeSize) -> NewTaskButtonPlacement {
+        typeSize.isAccessibilitySize ? .navigationBar : .floating
+    }
+}
+
+private struct NewTaskButtonModifier: ViewModifier {
+    let action: (() -> Void)?
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let action {
+            switch NewTaskButtonPlacement.at(typeSize) {
+            case .floating:
+                content.overlay(alignment: .bottomTrailing) {
+                    NewTaskFloatingButton(action: action)
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 16)
+                }
+            case .navigationBar:
+                content.toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: action) {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("New task")
+                    }
+                }
             }
+        } else {
+            content
         }
     }
 }

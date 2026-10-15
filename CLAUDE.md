@@ -162,7 +162,9 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   or `revision_requested`, Ask for changes on `pending` only; each sends its optional note as
   `decisionNote` (`POST /approvals/:id/{approve,reject,request-revision}`). Never log a note.
 - New task: one `NewTaskModel` per account and company, owned by `HomeView` and shared by the
-  New task sheet (floating **+** on Today, Inbox and Tasks) and the Today bar "Message <name>…".
+  New task sheet (floating **+** on Today, Inbox and Tasks; on Inbox and Tasks it moves into the
+  navigation bar from the accessibility text sizes up, `NewTaskButtonPlacement`, so rows never
+  rest half hidden under it) and the Today bar "Message <name>…".
   One text field: `NewTaskText` splits it (first line = title, rest = description); a title is
   required, no priority, labels or blockers. Assignee chip = agents from
   `GET /companies/:id/agents`; project chip = `GET /companies/:id/projects` (default none, a failed
