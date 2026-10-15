@@ -107,7 +107,20 @@ own with `swift test`. Keychain, UI and app state live in the app target.
 - Inbox: one fetch of `touchedByUserId=me&inboxArchivedByUserId=me`; the segments Unread
   (`isUnreadForMe`), Mine (assigned to or created by me) and All filter it locally. New comments
   bump an issue's `updatedAt`, so the delta poll sees new replies. Read or archive done in another
-  client shows up on the next full fetch.
+  client shows up on the next full fetch. Search: typing filters loaded titles at once; after a
+  300 ms pause (`SearchDebounce`, run from `.task(id: searchText)` so a keystroke cancels it) the
+  same inbox query plus `q` replaces the local filter; segments and swipes still apply; clearing
+  needs no request.
+- Tasks (`TasksModel`): the whole company (`GET /companies/:id/issues`), never the inbox
+  filters. Status picker (`TaskStatusFilter`, default Open = backlog, todo, in_progress,
+  in_review, blocked) and assignee picker (`TaskAssigneeFilter`: Anyone, Me = `assigneeUserId=me`,
+  an agent = `assigneeAgentId`; agents from `GET /companies/:id/agents`, terminated left out). A
+  filter change or pull to refresh refetches from the first page; search uses `SearchDebounce`
+  and `q` and stays on for refresh and paging. Pages of 50 (`limit`, `offset`), "load more"
+  until a short page; a failed page keeps the rows (`pageError`). Sections by project name
+  (`GET /companies/:id/projects`), then "Other project" (not in the list, e.g. archived), then
+  "No project"; rows keep the server order. A failed project fetch only loses the names. No
+  polling: it is a look-up screen. Never log the search text.
 - Task detail: one route, `TaskRoute(issueID:)`, pushed from every list (`.navigationDestination`
   in each tab's `NavigationStack`). `TaskDetailModel` needs the task and its thread; documents,
   attachments, live runs, agents and mark-read are extras whose failure never hides the task.
