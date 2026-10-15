@@ -12,6 +12,8 @@ struct HomeView: View {
 
     /// Me → Accounts and the quick switcher opened from the Today title.
     @State private var accounts: AccountsModel
+    /// Me → More: the company's web prefix for "Open in web".
+    @State private var more: MoreModel
     @State private var showsSwitcher = false
     @State private var selection: AppTab = .today
     @State private var paths: [AppTab: NavigationPath] = [:]
@@ -22,6 +24,7 @@ struct HomeView: View {
         self.store = store
         self.accountID = accountID
         _accounts = State(initialValue: AccountsModel(store: store))
+        _more = State(initialValue: MoreModel(store: store, accountID: accountID))
     }
 
     var body: some View {
@@ -34,6 +37,12 @@ struct HomeView: View {
                         }
                         .navigationDestination(for: ApprovalRoute.self) { route in
                             ApprovalDetailView(store: store, accountID: accountID, approvalID: route.approvalID)
+                        }
+                        .navigationDestination(for: AgentRoute.self) { route in
+                            AgentDetailView(store: store, accountID: accountID, agentID: route.agentID, more: more)
+                        }
+                        .navigationDestination(for: RunLogRoute.self) { route in
+                            RunLogView(store: store, accountID: accountID, route: route)
                         }
                 }
                 .tabItem { Label(tab.title, systemImage: tab.systemImage) }
@@ -51,6 +60,7 @@ struct HomeView: View {
         .task {
             // The company name for the Today title.
             await accounts.refresh()
+            await more.refresh()
         }
         .onChange(of: newTask?.createdIssue?.id) { _, issueID in
             guard let issueID else { return }
@@ -84,7 +94,7 @@ struct HomeView: View {
         case .tasks:
             TasksView(store: store, accountID: accountID, onNewTask: openNewTask)
         case .me:
-            AccountsView(model: accounts, title: tab.title, showsDoneButton: false)
+            AccountsView(model: accounts, title: tab.title, showsDoneButton: false, more: more)
         }
     }
 
