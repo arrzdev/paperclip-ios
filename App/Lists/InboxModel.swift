@@ -53,6 +53,7 @@ final class InboxModel {
     let accountID: UUID
     private let poller: Poller
     private let now: @Sendable () -> Date
+    private let debounce: SearchDebounce
 
     static let undoWindow: TimeInterval = 5
 
@@ -66,6 +67,9 @@ final class InboxModel {
     private var unreadOverrides: [String: Bool] = [:]
     /// Archived by a swipe; the inbox query no longer returns them.
     private var archivedIDs: Set<String> = []
+    /// Server results (inbox query plus `q`) for `searchedTerm`, by id.
+    private var searchResults: [String: Issue]?
+    private var searchedTerm: String?
 
     private(set) var undo: InboxUndo?
     /// Set when an action failed and was rolled back.
@@ -75,18 +79,25 @@ final class InboxModel {
         store: AccountStore,
         accountID: UUID,
         poller: Poller = .live,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        debounce: SearchDebounce = .live
     ) {
         self.store = store
         self.accountID = accountID
         self.poller = poller
         self.now = now
+        self.debounce = debounce
     }
 
     var state: LoadState<[InboxRow]> {
         if let failure { return failure }
-        guard issues != nil else { return .loading }
-        let rows = rows(in: segment).filter(matchesSearch)
+        guard let issues else { return .loading }
+        let rows: [InboxRow]
+        if let results = activeSearchResults {
+            rows = self.rows(in: segment, from: results)
+        } else {
+            rows = self.rows(in: segment, from: issues).filter(matchesSearch)
+        }
         return rows.isEmpty ? .empty : .loaded(rows)
     }
 
@@ -106,6 +117,10 @@ final class InboxModel {
         } catch {
             failure = failureState(for: error)
             store.log("Inbox failed for account \(accountID): \(userMessage(for: error))")
+            return
+        }
+        if let term = searchedTerm {
+            await runSearch(term)
         }
     }
 
@@ -124,6 +139,7 @@ final class InboxModel {
             var merged = issues ?? loaded
             for issue in changed {
                 merged[issue.id] = issue
+                if searchResults?[issue.id] != nil { searchResults?[issue.id] = issue }
                 unreadOverrides[issue.id] = nil
                 archivedIDs.remove(issue.id)
             }
@@ -133,6 +149,21 @@ final class InboxModel {
         } catch {
             store.log("Inbox poll failed for account \(accountID): \(userMessage(for: error))")
         }
+    }
+
+    /// Server search after `SearchDebounce.delay`: the inbox query plus `q`
+    /// (titles, descriptions and comments). Its results replace the local title
+    /// filter while the text is unchanged; segments and swipes still apply.
+    /// Blank text drops them without a request. Never logs the text.
+    func search() async {
+        guard let term = SearchDebounce.term(searchText) else {
+            searchResults = nil
+            searchedTerm = nil
+            return
+        }
+        guard term != searchedTerm else { return }
+        guard await debounce.wait() else { return }
+        await runSearch(term)
     }
 
     /// Polls every `Poller.interval` until the calling task is cancelled.
@@ -217,6 +248,31 @@ final class InboxModel {
         }
     }
 
+    /// A failure keeps the local title filter; a 401 ends in `needsSignIn`.
+    private func runSearch(_ term: String) async {
+        var query = IssueListQuery.inbox
+        query.search = term
+        do {
+            let found = try await fetch(query)
+            searchResults = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+            searchedTerm = term
+        } catch APIError.unauthorized {
+            failure = .needsSignIn
+        } catch {
+            searchResults = nil
+            searchedTerm = nil
+            if !Task.isCancelled {
+                store.log("Inbox search failed for account \(accountID): \(userMessage(for: error))")
+            }
+        }
+    }
+
+    /// Server results while they match the text in the field.
+    private var activeSearchResults: [String: Issue]? {
+        guard let searchedTerm, searchedTerm == SearchDebounce.term(searchText) else { return nil }
+        return searchResults
+    }
+
     private var account: Account? {
         store.accounts.first { $0.id == accountID }
     }
@@ -231,11 +287,14 @@ final class InboxModel {
         return .error(userMessage(for: error))
     }
 
-    /// Newest activity first.
     private func rows(in segment: InboxSegment) -> [InboxRow] {
+        rows(in: segment, from: issues ?? [:])
+    }
+
+    /// Newest activity first.
+    private func rows(in segment: InboxSegment, from source: [String: Issue]) -> [InboxRow] {
         let userId = account?.userId
-        let all: [Issue] = issues.map { Array($0.values) } ?? []
-        return all
+        return Array(source.values)
             .filter { !archivedIDs.contains($0.id) }
             .filter { issue in
                 switch segment {
