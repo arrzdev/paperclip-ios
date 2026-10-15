@@ -26,6 +26,7 @@ func issueJSON(
     status: String = "todo",
     assigneeUserId: String? = nil,
     createdByUserId: String? = nil,
+    projectId: String? = nil,
     unread: Bool? = nil,
     updatedAt: String = "2026-10-14T09:00:00.000Z",
     lastActivityAt: String? = nil,
@@ -38,7 +39,7 @@ func issueJSON(
     {"id":"\(id)","companyId":"company-1","identifier":"PAP-\(number)","title":\(text(title ?? "Task \(id)")),\
     "description":null,"status":"\(status)","priority":"medium","assigneeAgentId":null,\
     "assigneeUserId":\(text(assigneeUserId)),"createdByAgentId":null,"createdByUserId":\(text(createdByUserId)),\
-    "projectId":null,"parentId":null,"createdAt":"2026-10-01T08:00:00.000Z","updatedAt":"\(updatedAt)",\
+    "projectId":\(text(projectId)),"parentId":null,"createdAt":"2026-10-01T08:00:00.000Z","updatedAt":"\(updatedAt)",\
     "completedAt":\(text(completedAt)),"lastActivityAt":\(text(lastActivityAt ?? updatedAt)),\
     "myLastTouchAt":null,"lastExternalCommentAt":\(text(lastExternalCommentAt)),\
     "isUnreadForMe":\(unread.map { $0 ? "true" : "false" } ?? "null")}

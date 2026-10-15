@@ -130,6 +130,36 @@ struct APIClientTests {
         #expect(issues[1].priority == .unknown("urgent"))
     }
 
+    @Test func tasksTabQuerySendsAssigneeSearchAndPage() async throws {
+        try stub("issues")
+        var query = IssueListQuery()
+        query.status = [.done]
+        query.assigneeAgentId = "00000000-0000-4000-8000-000000000002"
+        query.assigneeUserId = "me"
+        query.search = "login page"
+        query.limit = 50
+        query.offset = 100
+        _ = try await client.issues(companyId: "company-1", query: query)
+
+        let url = try #require(StubURLProtocol.lastRequest?.url)
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(items.contains(URLQueryItem(name: "status", value: "done")))
+        #expect(items.contains(URLQueryItem(name: "assigneeAgentId", value: "00000000-0000-4000-8000-000000000002")))
+        #expect(items.contains(URLQueryItem(name: "assigneeUserId", value: "me")))
+        #expect(items.contains(URLQueryItem(name: "q", value: "login page")))
+        #expect(items.contains(URLQueryItem(name: "limit", value: "50")))
+        #expect(items.contains(URLQueryItem(name: "offset", value: "100")))
+        #expect(url.absoluteString.contains("q=login%20page"))
+    }
+
+    @Test func emptyQuerySendsNoAssigneeOrOffset() async throws {
+        try stub("issues")
+        _ = try await client.issues(companyId: "company-1", query: IssueListQuery())
+
+        let url = try #require(StubURLProtocol.lastRequest?.url)
+        #expect(url.query == nil || url.query == "")
+    }
+
     @Test func inboxHidesArchivedAndDecodesReadStateForTheSignedInUser() async throws {
         try stub("inbox-issues")
         let issues = try await client.issues(companyId: "company-1", query: .inbox)

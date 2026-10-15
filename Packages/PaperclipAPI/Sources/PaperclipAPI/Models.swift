@@ -286,6 +286,8 @@ public struct IssueUpdate: Encodable, Equatable, Sendable {
 public struct IssueListQuery: Equatable, Sendable {
     public var status: [IssueStatus] = []
     public var assigneeUserId: String?
+    /// An agent's UUID, or `"null"` for no agent assignee.
+    public var assigneeAgentId: String?
     public var touchedByUserId: String?
     public var unreadForUserId: String?
     public var inboxArchivedByUserId: String?
@@ -293,6 +295,8 @@ public struct IssueListQuery: Equatable, Sendable {
     public var search: String?
     public var updatedSince: Date?
     public var limit: Int?
+    /// Rows to skip (paging with `limit`).
+    public var offset: Int?
 
     public init() {}
 
@@ -311,6 +315,7 @@ public struct IssueListQuery: Equatable, Sendable {
         }
         let pairs: [(String, String?)] = [
             ("assigneeUserId", assigneeUserId),
+            ("assigneeAgentId", assigneeAgentId),
             ("touchedByUserId", touchedByUserId),
             ("unreadForUserId", unreadForUserId),
             ("inboxArchivedByUserId", inboxArchivedByUserId),
@@ -318,6 +323,7 @@ public struct IssueListQuery: Equatable, Sendable {
             ("q", search),
             ("updatedSince", updatedSince.map(PaperclipDate.format)),
             ("limit", limit.map(String.init)),
+            ("offset", offset.map(String.init)),
         ]
         for (name, value) in pairs {
             if let value { items.append(URLQueryItem(name: name, value: value)) }
