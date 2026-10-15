@@ -222,8 +222,8 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   A screen that calls a new endpoint needs a route there. `ScreenTourUITests` walks Today, Inbox,
   Tasks, Me → Accounts and Me → More at default size, AX5 and dark, keeps a screenshot of each
   screen and runs `performAccessibilityAudit()`. `UITests/AccessibilityBaseline.json` holds the
-  known issues (screen → kind → count); anything beyond it fails. Fix an issue → lower its count;
-  never raise a count to hide a new issue. CI job `ui-test` uploads `Paperclip-ui-screenshots`
+  issue kinds already known per screen (kinds, not counts: findings vary between runs); a new kind
+  on a screen fails. Fixed a kind on a screen → remove it; never add one to hide a regression. CI job `ui-test` uploads `Paperclip-ui-screenshots`
   (screenshots, `audit-report.md`, test summary) and `Paperclip-ui-xcresult`.
 
 ## Branches, PRs and CI

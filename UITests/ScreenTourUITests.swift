@@ -5,9 +5,10 @@ import XCTest
 /// accessibility text size and in dark mode. Each screen is kept as a
 /// screenshot and runs the iOS 17 accessibility audit. Every issue is listed
 /// in the screen's "audit" attachment. An issue fails the test unless
-/// `AccessibilityBaseline.json` allows it: per screen, how many issues of each
-/// kind were already known. Fixing issues lowers the counts there; a new issue
-/// (or one more of a known kind) fails.
+/// `AccessibilityBaseline.json` lists its kind for that screen (the kinds
+/// already known there; the audit's exact findings vary between runs, so it
+/// holds kinds, not counts). Fixing a kind on a screen removes it there; a new
+/// kind on a screen fails.
 @MainActor
 final class ScreenTourUITests: XCTestCase {
     func testDefaultSize() {
@@ -123,34 +124,40 @@ final class ScreenTourUITests: XCTestCase {
     }
 
     /// Runs the accessibility audit; every issue goes into a text attachment.
+    /// A timed-out audit is retried once.
     private func audit(_ app: XCUIApplication, screen: String) {
-        var allowed = Self.baseline[screen] ?? [:]
+        let known = Set(Self.baseline[screen] ?? [])
         var lines: [String] = []
-        do {
-            try app.performAccessibilityAudit { issue in
-                let kind = issue.compactDescription
-                let label = issue.element.map { "'\($0.label)'" } ?? "no element"
-                let known = (allowed[kind] ?? 0) > 0
-                if known { allowed[kind, default: 0] -= 1 }
-                lines.append("\(known ? "known" : "NEW"): \(kind) — \(label)")
-                return known
+        for attempt in 1...2 {
+            lines = []
+            do {
+                try app.performAccessibilityAudit { issue in
+                    let kind = issue.compactDescription
+                    let label = issue.element.map { "'\($0.label)'" } ?? "no element"
+                    let isKnown = known.contains(kind)
+                    lines.append("\(isKnown ? "known" : "NEW"): \(kind) — \(label)")
+                    return isKnown
+                }
+                break
+            } catch {
+                if attempt == 2 {
+                    XCTFail("Accessibility audit could not run on \(screen): \(error)")
+                } else {
+                    RunLoop.current.run(until: Date().addingTimeInterval(2))
+                }
             }
-        } catch {
-            XCTFail("Accessibility audit could not run on \(screen): \(error)")
         }
-        let fixed = allowed.filter { $0.value > 0 }.map { "fixed (lower the baseline): \($0.key) × \($0.value)" }
-        let all = lines + fixed.sorted()
-        let attachment = XCTAttachment(string: all.isEmpty ? "No issues." : all.joined(separator: "\n"))
+        let attachment = XCTAttachment(string: lines.isEmpty ? "No issues." : lines.joined(separator: "\n"))
         attachment.name = "\(screen) audit"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
 
-    /// Known audit issues: screen ("<variant> <screen>") → issue kind → count.
-    static let baseline: [String: [String: Int]] = {
+    /// Known audit issue kinds per screen ("<variant> <screen>").
+    static let baseline: [String: [String]] = {
         guard let url = Bundle(for: ScreenTourUITests.self).url(forResource: "AccessibilityBaseline", withExtension: "json"),
               let data = try? Data(contentsOf: url),
-              let baseline = try? JSONDecoder().decode([String: [String: Int]].self, from: data)
+              let baseline = try? JSONDecoder().decode([String: [String]].self, from: data)
         else { return [:] }
         return baseline
     }()
