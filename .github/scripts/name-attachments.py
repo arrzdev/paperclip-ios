@@ -46,7 +46,7 @@ def main(source, target):
                     with open(os.path.join(source, exported)) as handle:
                         audits.append((stem[: -len(" audit")], handle.read().strip()))
     with open(os.path.join(target, "audit-report.md"), "w") as report:
-        report.write("# Accessibility audit\n\nNEW = fails the test; known = in UITests/AccessibilityBaseline.json.\n")
+        report.write("# Accessibility audit\n\nNEW = fails the test; known = kind listed for that screen in UITests/AccessibilityBaseline.json.\n")
         for screen, text in sorted(audits):
             report.write("\n## %s\n\n```\n%s\n```\n" % (screen, text))
     for name in os.listdir(source):
