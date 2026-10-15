@@ -83,10 +83,11 @@ struct ApprovalDetailModelTests {
         #expect(cards.map(\.id) == ["approval-2", "approval-1"])
         #expect(cards.map(\.kind) == [.approval, .approval])
         #expect(cards.map(\.title) == ["Approval: Renew the domain", "Approval: Hire a designer"])
-        #expect(cards[0].approvalID == "approval-2")
-        #expect(cards[0].approvalRoute == ApprovalRoute(approvalID: "approval-2"))
-        #expect(cards[0].issueID == nil)
-        #expect(cards[0].route == nil)
+        let first = try #require(cards.first)
+        #expect(first.approvalID == "approval-2")
+        #expect(first.approvalRoute == ApprovalRoute(approvalID: "approval-2"))
+        #expect(first.issueID == nil)
+        #expect(first.route == nil)
     }
 
     @Test func noPendingApprovalNoCard() async throws {
@@ -135,6 +136,7 @@ struct ApprovalDetailModelTests {
         #expect(detail.approval.summaryFields.map(\.label) == ["Budget monthly cents", "Title"])
         #expect(detail.comments.map(\.id) == ["ac-1", "ac-2"])
         #expect(model.requesterName == "Luis")
+        try #require(detail.comments.count == 2)
         #expect(model.authorName(for: detail.comments[0]) == "Luis")
         #expect(model.authorName(for: detail.comments[1]) == "You")
     }
