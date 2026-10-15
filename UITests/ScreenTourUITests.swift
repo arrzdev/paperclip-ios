@@ -119,14 +119,23 @@ final class ScreenTourUITests: XCTestCase {
         if back.exists { back.tap() }
     }
 
-    /// Waits until no spinner shows (at most 10 s), then a short settle for animations.
+    /// Waits until no spinner shows (at most 10 s), then until two screenshots
+    /// in a row are the same (at most 5 s): the audit must not judge a row or
+    /// a title still fading in.
     private func waitUntilLoaded(_ app: XCUIApplication) {
         let spinners = app.activityIndicators
         let deadline = Date().addingTimeInterval(10)
         while spinners.count > 0, Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
-        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        var last = app.screenshot().pngRepresentation
+        let stillDeadline = Date().addingTimeInterval(5)
+        while Date() < stillDeadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            let next = app.screenshot().pngRepresentation
+            if next == last { break }
+            last = next
+        }
     }
 
     // MARK: - Evidence
