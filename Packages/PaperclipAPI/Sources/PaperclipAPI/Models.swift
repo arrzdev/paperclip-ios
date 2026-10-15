@@ -369,6 +369,19 @@ public struct Attachment: Decodable, Equatable, Identifiable, Sendable {
     public let createdAt: Date?
 }
 
+/// A file to upload with `POST /api/companies/:cid/issues/:iid/attachments`.
+public struct AttachmentUpload: Equatable, Sendable {
+    public let data: Data
+    public let filename: String
+    public let contentType: String
+
+    public init(data: Data, filename: String, contentType: String) {
+        self.data = data
+        self.filename = filename
+        self.contentType = contentType
+    }
+}
+
 /// A queued or running agent run on a task (`GET /api/issues/:id/live-runs`).
 public struct LiveRun: Decodable, Equatable, Identifiable, Sendable {
     public let id: String
