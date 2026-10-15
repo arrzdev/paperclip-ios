@@ -129,6 +129,16 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   me (`GET /issues/:id/comments?limit=5`); pulse = running agents and blocked tasks from
   `GET /companies/:id/dashboard` plus tasks completed today. A failed pulse hides only the pulse.
   Until task detail exists, cards open the issue in the web UI.
+- Requests (issue thread interactions, `GET /issues/:id/interactions`, pending only): Today pairs
+  each attention item of kind interaction with its interaction (`subject.id`, one fetch per task);
+  Task detail shows them in the thread by `createdAt`. `InteractionCard.action` is `.confirm`
+  (`request_confirmation` without `toolAction` / `secretProposal`), `.answer` (`ask_user_questions`,
+  at most 20 questions of mode single or multi, form = `QuestionForm`) or `.openInWeb` (anything
+  else, never a crash). `RequestActions` (shared) hides the card at once and shows a 5 s undo
+  toast; the request (`POST …/interactions/:iid/{accept,reject,respond}`) is sent only when the
+  toast ends, the screen goes away or another action starts. Undo sends nothing. A failure
+  brings the card back with the error; a 409 means it was already answered and the card stays
+  gone. Never log a reject reason or an answer.
 
 ## Tests
 
