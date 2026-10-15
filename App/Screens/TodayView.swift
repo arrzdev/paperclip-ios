@@ -2,8 +2,9 @@ import PaperclipAPI
 import SwiftUI
 
 /// What needs me now: "Needs you" cards, "New replies" and the pulse line,
-/// refreshed by polling while on screen. Open goes to the web UI until task
-/// detail exists. Replies swipe like the Inbox: right marks read, left archives.
+/// refreshed by polling while on screen. Open and a reply row push Task detail;
+/// a card without a task opens the web UI. Replies swipe like the Inbox: right
+/// marks read, left archives.
 @MainActor
 struct TodayView: View {
     @State private var model: TodayModel
@@ -28,12 +29,9 @@ struct TodayView: View {
                 if !content.newReplies.isEmpty {
                     Section {
                         ForEach(content.newReplies) { row in
-                            Button {
-                                open(webPath(identifier: row.issue.identifier))
-                            } label: {
+                            NavigationLink(value: row.route) {
                                 ReplyRowView(row: row)
                             }
-                            .buttonStyle(.plain)
                             .swipeActions(edge: .leading) {
                                 Button {
                                     Task { await model.markRead(row) }
@@ -177,7 +175,12 @@ private struct NeedsYouCardView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
             }
-            if card.webPath != nil {
+            if let route = card.route {
+                NavigationLink("Open", value: route)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .padding(.top, 2)
+            } else if card.webPath != nil {
                 Button("Open", action: onOpen)
                     .buttonStyle(.bordered)
                     .controlSize(.small)

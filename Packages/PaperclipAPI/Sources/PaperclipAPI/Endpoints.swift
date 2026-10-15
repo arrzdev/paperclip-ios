@@ -83,6 +83,17 @@ public extension APIClient {
         try await send(.post, "/issues/\(segment(issueId))/comments", body: comment)
     }
 
+    /// The whole thread oldest first, or only the comments after `commentId`.
+    func commentThread(issueId: String, after commentId: String? = nil) async throws -> [IssueComment] {
+        var query = [URLQueryItem(name: "order", value: "asc")]
+        if let commentId { query.append(URLQueryItem(name: "after", value: commentId)) }
+        return try await send(.get, "/issues/\(segment(issueId))/comments", query: query)
+    }
+
+    func liveRuns(issueId: String) async throws -> [LiveRun] {
+        try await send(.get, "/issues/\(segment(issueId))/live-runs")
+    }
+
     func documents(issueId: String) async throws -> [IssueDocument] {
         try await send(.get, "/issues/\(segment(issueId))/documents")
     }
@@ -93,6 +104,17 @@ public extension APIClient {
 
     func attachments(issueId: String) async throws -> [Attachment] {
         try await send(.get, "/issues/\(segment(issueId))/attachments")
+    }
+
+    /// The file's bytes (`GET /api/attachments/:id/content`).
+    func attachmentContent(id: String) async throws -> Data {
+        try await request(.get, "/attachments/\(segment(id))/content", accept: "*/*")
+    }
+
+    // MARK: Agents
+
+    func agents(companyId: String) async throws -> [Agent] {
+        try await send(.get, "/companies/\(segment(companyId))/agents")
     }
 
     // MARK: Read / archive

@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Threads the user touched, in three segments, refreshed by polling while on screen.
 /// Swipe right marks read / unread, swipe left archives; both can be undone.
+/// A row opens Task detail.
 @MainActor
 struct InboxView: View {
     @State private var model: InboxModel
@@ -15,7 +16,9 @@ struct InboxView: View {
         List {
             if case .loaded(let rows) = model.state {
                 ForEach(rows) { row in
-                    InboxRowView(row: row)
+                    NavigationLink(value: row.route) {
+                        InboxRowView(row: row)
+                    }
                         .swipeActions(edge: .leading) {
                             Button {
                                 Task { await model.toggleRead(row) }

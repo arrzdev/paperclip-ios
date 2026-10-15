@@ -108,6 +108,15 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   (`isUnreadForMe`), Mine (assigned to or created by me) and All filter it locally. New comments
   bump an issue's `updatedAt`, so the delta poll sees new replies. Read or archive done in another
   client shows up on the next full fetch.
+- Task detail: one route, `TaskRoute(issueID:)`, pushed from every list (`.navigationDestination`
+  in each tab's `NavigationStack`). `TaskDetailModel` needs the task and its thread; documents,
+  attachments, live runs, agents and mark-read are extras whose failure never hides the task.
+  The thread is oldest first (`order=asc`); `poll()` refetches the task and live runs and asks
+  only for comments `after` the last id (a single task has no `updatedSince`). Opening marks the
+  task read, and so does a poll that brings new comments. Pickers change the task at once and roll
+  back on error; an assignee change sends both `assigneeAgentId` and `assigneeUserId` (one null).
+  Review bar only on `in_review` / `done`; Re-open needs a non-empty comment (`status todo` +
+  `comment` in one `PATCH`).
 - Today: "Needs you" = attention items of kind interaction, approval and review
   (`GET /companies/:id/attention`) plus my open tasks; "New replies" = unread threads
   (`unreadForUserId=me`), at most 10, preview = first line of the newest comment not written by
