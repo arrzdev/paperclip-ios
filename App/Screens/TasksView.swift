@@ -47,7 +47,9 @@ struct TasksView: View {
         .animation(.default, value: model.state)
         .overlay { overlay }
         .newTaskButton(onNewTask)
-        .searchable(text: $model.searchText, prompt: "Search tasks")
+        // Always shown: a list scrolled a little leaves the hiding drawer
+        // a sliver too small to tap.
+        .searchable(text: $model.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search tasks")
         .task(id: model.searchText) { await model.search() }
         .refreshable { await model.refresh() }
         .task(id: Filters(status: model.status, assignee: model.assignee)) {

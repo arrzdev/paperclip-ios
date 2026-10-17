@@ -162,7 +162,9 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   or `revision_requested`, Ask for changes on `pending` only; each sends its optional note as
   `decisionNote` (`POST /approvals/:id/{approve,reject,request-revision}`). Never log a note.
 - New task: one `NewTaskModel` per account and company, owned by `HomeView` and shared by the
-  New task sheet (floating **+** on Today, Inbox and Tasks) and the Today bar "Message <name>…".
+  New task sheet (floating **+** on Today, Inbox and Tasks; on Inbox and Tasks it moves into the
+  navigation bar from the accessibility text sizes up, `NewTaskButtonPlacement`, so rows never
+  rest half hidden under it) and the Today bar "Message <name>…".
   One text field: `NewTaskText` splits it (first line = title, rest = description); a title is
   required, no priority, labels or blockers. Assignee chip = agents from
   `GET /companies/:id/agents`; project chip = `GET /companies/:id/projects` (default none, a failed
@@ -221,7 +223,9 @@ own with `swift test`. Keychain, UI and app state live in the app target.
   `FixtureRoutes`; bundled as `Fixtures/`, excluded from Release). `-uiTestDark` forces dark mode.
   A screen that calls a new endpoint needs a route there. `ScreenTourUITests` walks Today, Inbox,
   Tasks, Me → Accounts and Me → More at default size, AX5 and dark, keeps a screenshot of each
-  screen and runs `performAccessibilityAudit()`. `UITests/AccessibilityBaseline.json` holds the
+  screen and runs `performAccessibilityAudit()` (an audit that timed out, or ran while the screen
+  moved, runs once more and only that run counts; after a timeout that run checks one audit type
+  at a time). `UITests/AccessibilityBaseline.json` holds the
   issue kinds already known per screen (kinds, not counts: findings vary between runs); a new kind
   on a screen fails. The Dynamic Type kind, known for a screen in one variant, counts in all three
   (the audit reports it unevenly). Contrast issues of elements under the tab, navigation or Today
