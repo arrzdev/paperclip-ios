@@ -242,7 +242,10 @@ private struct CompanyRow: View {
     var body: some View {
         Button(action: action) {
             HStack {
+                // Set explicitly: text that only inherits the row font is
+                // reported as not scaling (see `RowLabel`).
                 Text(company.name)
+                    .font(.body)
                 Spacer()
                 if let badge, badge > 0 {
                     Text("\(badge)")

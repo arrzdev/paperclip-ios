@@ -179,7 +179,8 @@ own with `swift test`. Keychain, UI and app state live in the app target.
 - Me → Accounts (`AccountsModel`, shared by the Me tab and the quick switcher sheet opened from
   the Today title): every server with its user and companies (`GET /companies` with that
   account's own key), a "Needs you" badge per account and company = `inbox` of
-  `GET /companies/:id/sidebar-badges`, polled every 15 s (badges only). A 401 marks only that
+  `GET /companies/:id/sidebar-badges`, polled every 15 s (badges only; a poll with the same counts writes nothing, so the list is not
+  redrawn). A 401 marks only that
   account; a signed-out account is never called; a failed badge keeps the last count. Tap a
   company = `switchTo(accountID:companyID:)` (both persisted; `HomeView` is keyed by account and
   company, so Today reloads). Swipe a server: Sign out (`AccountStore.signOut`, key deleted, server

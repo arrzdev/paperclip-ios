@@ -123,7 +123,10 @@ final class AccountsModel {
             guard isSignedIn(id) else { return }
             do {
                 let result = try await store.call(id) { try await $0.sidebarBadges(companyId: company.id) }
-                badges[id, default: [:]][company.id] = result.inbox
+                // Same count: no write, so the list is not redrawn every poll.
+                if badges[id]?[company.id] != result.inbox {
+                    badges[id, default: [:]][company.id] = result.inbox
+                }
             } catch {
                 store.log("Account \(id): badge failed for company \(company.id)")
             }
@@ -131,17 +134,22 @@ final class AccountsModel {
     }
 
     /// Sections from `store.accounts`; forgets what belongs to removed or signed-out accounts.
+    /// Writes only what changed: every write redraws the list.
     private func rebuild() {
         let signedIn = Set(store.accounts.filter { !$0.needsSignIn }.map(\.id))
-        companies = companies.filter { signedIn.contains($0.key) }
-        errors = errors.filter { signedIn.contains($0.key) }
-        badges = badges.filter { signedIn.contains($0.key) }
-        sections = store.accounts.map { account in
+        let keptCompanies = companies.filter { signedIn.contains($0.key) }
+        if keptCompanies != companies { companies = keptCompanies }
+        let keptErrors = errors.filter { signedIn.contains($0.key) }
+        if keptErrors != errors { errors = keptErrors }
+        let keptBadges = badges.filter { signedIn.contains($0.key) }
+        if keptBadges != badges { badges = keptBadges }
+        let newSections = store.accounts.map { account in
             AccountSection(
                 account: account,
                 companies: companies[account.id] ?? [],
                 errorMessage: errors[account.id]
             )
         }
+        if newSections != sections { sections = newSections }
     }
 }

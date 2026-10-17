@@ -269,6 +269,22 @@ final class LogSink: @unchecked Sendable {
     }
 }
 
+/// Set once by an observation `onChange`.
+final class ChangeFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    var isSet: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return value
+    }
+
+    func set() {
+        lock.lock(); defer { lock.unlock() }
+        value = true
+    }
+}
+
 /// A clock that moves only when the code under test sleeps.
 final class TestClock: @unchecked Sendable {
     private let lock = NSLock()
