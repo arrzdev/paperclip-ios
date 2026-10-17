@@ -194,11 +194,90 @@ final class ScreenTourUITests: XCTestCase {
         for issue in result.newIssues {
             XCTFail("\(screen): NEW audit issue \(issue)")
         }
+        if result.newIssues.contains(where: { $0.hasPrefix(Self.unsupportedNoElement) }) {
+            diagnoseUnsupportedText(app, screen: screen)
+        }
         let lines = notes + (result.lines.isEmpty ? ["No issues."] : result.lines)
         let attachment = XCTAttachment(string: lines.joined(separator: "\n"))
         attachment.name = "\(screen) audit"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    // MARK: - Diagnostic: text that does not scale, with no element
+
+    /// The audit's finding for drawn text that matches no element and does
+    /// not follow the text size (suspect: a list row seen through the tab
+    /// bar's glass).
+    static let unsupportedNoElement = "Dynamic Type font sizes are unsupported — no element"
+
+    /// Evidence only, never a pass or a fail: the element tree, the frames of
+    /// the tab bar and of the first and last visible list rows, a screenshot,
+    /// then the same again after scrolling the list to the top, with a
+    /// Dynamic Type-only audit there. All in "<screen> unsupported text
+    /// diagnostic".
+    private func diagnoseUnsupportedText(_ app: XCUIApplication, screen: String) {
+        var lines = ["As the counted audit left the screen:"]
+        lines += layoutLines(app)
+        keep(app.screenshot(), name: "\(screen) unsupported text diagnostic, as audited")
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "\(screen) unsupported text diagnostic, element tree"
+        tree.lifetime = .keepAlways
+        add(tree)
+
+        scrollListToTop(app)
+        lines.append("After scrolling the list to the top:")
+        lines += layoutLines(app)
+        keep(app.screenshot(), name: "\(screen) unsupported text diagnostic, at top")
+        let atTop = auditOnce(app, known: Self.knownKinds(for: screen), types: .dynamicType)
+        lines.append("Dynamic Type-only audit at the top (not counted):")
+        lines += atTop.lines.isEmpty ? ["No issues."] : atTop.lines
+        if let error = atTop.error {
+            lines.append("error: \(error.localizedDescription)")
+        }
+
+        let attachment = XCTAttachment(string: lines.joined(separator: "\n"))
+        attachment.name = "\(screen) unsupported text diagnostic"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    /// The tab bar, the first and last visible rows, and every row under the
+    /// tab bar (with its label).
+    private func layoutLines(_ app: XCUIApplication) -> [String] {
+        let screen = app.windows.firstMatch.frame
+        let tabBar = app.tabBars.firstMatch
+        let tabFrame = tabBar.exists ? tabBar.frame : .zero
+        var lines = ["tab bar: \(tabBar.exists ? Self.describe(tabFrame) : "none")"]
+        let rows = app.cells.allElementsBoundByIndex
+            .map { (label: $0.label, frame: $0.frame) }
+            .filter { !$0.frame.isEmpty && $0.frame.intersects(screen) }
+            .sorted { $0.frame.minY < $1.frame.minY }
+        if let first = rows.first, let last = rows.last {
+            lines.append("first visible row: '\(first.label)' \(Self.describe(first.frame))")
+            lines.append("last visible row: '\(last.label)' \(Self.describe(last.frame))")
+        } else {
+            lines.append("visible rows: none")
+        }
+        let under = rows.filter { !tabFrame.isEmpty && $0.frame.intersects(tabFrame) }
+        lines.append("rows under the tab bar: \(under.isEmpty ? "none" : under.map { "'\($0.label)' \(Self.describe($0.frame))" }.joined(separator: ", "))")
+        return lines
+    }
+
+    /// Swipes down until the first row stops moving (at most 4 swipes).
+    private func scrollListToTop(_ app: XCUIApplication) {
+        var lastTop = app.cells.firstMatch.exists ? app.cells.firstMatch.frame.minY : 0
+        for _ in 0..<4 {
+            app.swipeDown()
+            waitUntilLoaded(app)
+            let top = app.cells.firstMatch.exists ? app.cells.firstMatch.frame.minY : 0
+            if top == lastTop { break }
+            lastTop = top
+        }
+    }
+
+    static func describe(_ frame: CGRect) -> String {
+        "(x \(Int(frame.minX)), y \(Int(frame.minY)), w \(Int(frame.width)), h \(Int(frame.height)))"
     }
 
     private struct AuditResult {
