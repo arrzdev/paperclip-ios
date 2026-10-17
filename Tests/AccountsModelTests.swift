@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import PaperclipAPI
 import Testing
 @testable import PaperclipIOS
@@ -210,6 +211,51 @@ struct AccountsModelTests {
         #expect(setup.serverA.requests("GET", "/api/companies").count == 1)
         #expect(setup.serverB.requests("GET", "/api/companies").count == 1)
         #expect(setup.serverB.requests("GET", Self.badgesPath("company-3")).count == 2)
+    }
+
+    /// What the screen reads; the flag is set when any of it changes.
+    private func observeScreen(_ model: AccountsModel, _ setup: Setup) -> ChangeFlag {
+        let flag = ChangeFlag()
+        withObservationTracking {
+            _ = model.sections
+            _ = model.badge(accountID: setup.a, companyID: "company-1")
+            _ = model.badge(accountID: setup.a, companyID: "company-2")
+            _ = model.badge(accountID: setup.b, companyID: "company-3")
+            _ = model.isRefreshing
+        } onChange: {
+            flag.set()
+        }
+        return flag
+    }
+
+    /// A poll runs every 15 s: when no count changed, the list must not be
+    /// redrawn (a redraw during the accessibility audit loses its elements).
+    @Test func aPollWithTheSameCountsChangesNothingOnScreen() async throws {
+        let setup = try twoAccounts()
+        let model = AccountsModel(store: setup.store, poller: Poller(sleep: TestSleeper(ticks: 0).sleep))
+        await model.refresh()
+        let changed = observeScreen(model, setup)
+
+        await model.poll()
+
+        #expect(!changed.isSet)
+        #expect(model.badge(accountID: setup.a, companyID: "company-1") == 3)
+    }
+
+    @Test func aPollWithANewCountChangesTheScreen() async throws {
+        let setup = try twoAccounts()
+        setup.serverA.on(
+            "GET", Self.badgesPath("company-1"),
+            .ok(Self.badges(inbox: 3)), .ok(Self.badges(inbox: 5))
+        )
+        let model = AccountsModel(store: setup.store, poller: Poller(sleep: TestSleeper(ticks: 0).sleep))
+        await model.refresh()
+        let changed = observeScreen(model, setup)
+
+        await model.poll()
+
+        #expect(changed.isSet)
+        #expect(model.badge(accountID: setup.a, companyID: "company-1") == 5)
     }
 
     @Test func runPollingPollsEveryIntervalUntilCancelled() async throws {
