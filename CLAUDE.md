@@ -236,8 +236,11 @@ own with `swift test`. Keychain, UI and app state live in the app target.
 
 ## Branches, PRs and CI
 
-- Branch from `staging`, PR into `staging`. **Nothing merges into `main`** until the board approves
-  the first production launch. Both branches are protected: PR required, `gate` is the one required
+- Branch from `staging`, PR into `staging`. **Nothing merges into `main` without the board's OK for
+  that release**, the first launch and every release after it. The promotion PR `staging` → `main` is
+  prepared and QA-signed, then waits until the CEO brings the board the list of user-visible changes
+  with screenshots of the staging build and the board says yes. QA sign-off alone is never enough, and
+  there is no exception for reverts or invisible fixes. Both branches are protected: PR required, `gate` is the one required
   check, squash merge, linear history.
 - Conventional Commits, scope optional: `feat(api): decode issue list`. PR description says what
   changed and how CI proves it; no internal task ids or agent names.
